@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authenticate } from '../middleware/auth';
-import { authorize } from '../middleware/authorize';
+
 import { upload } from '../config/multer';
 import * as productImageController from '../controllers/productImageController';
 
@@ -15,7 +15,6 @@ const router = Router();
 router.post(
   '/:productId/images',
   authenticate,
-  authorize(['admin', 'manager']),
   upload.array('images', 10),
   productImageController.uploadImages
 );
@@ -31,7 +30,6 @@ router.get(
 router.put(
   '/:productId/images/:imageId',
   authenticate,
-  authorize(['admin', 'manager']),
   productImageController.updateImage
 );
 
@@ -39,7 +37,6 @@ router.put(
 router.delete(
   '/:productId/images/:imageId',
   authenticate,
-  authorize(['admin', 'manager']),
   productImageController.deleteImage
 );
 
@@ -47,7 +44,6 @@ router.delete(
 router.patch(
   '/:productId/images/:imageId/primary',
   authenticate,
-  authorize(['admin','manager']),
   productImageController.setPrimaryImage
 );
 
@@ -55,7 +51,6 @@ router.patch(
 router.put(
   '/:productId/images/reorder',
   authenticate,
-  authorize(['admin', 'manager']),
   productImageController.reorderImages
 );
 

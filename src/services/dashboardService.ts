@@ -212,3 +212,79 @@ export const getPriceDistribution = async () => {
     productCount: parseInt(row.productCount),
   }));
 };
+
+/**
+ * Get top selling products based on stock movements (out)
+ */
+export const getTopSellingProducts = async (limit: number = 5) => {
+  const results = await sequelize.query(
+    `
+    SELECT 
+      p.id,
+      p.name,
+      p.sku,
+      c.name as category,
+      SUM(sm.quantity) as totalSold,
+      SUM(sm.quantity * p.price) as totalRevenue,
+      SUM(sm.quantity * (p.price - p.cost)) as totalProfit
+    FROM stock_movements sm
+    INNER JOIN products p ON sm.productId = p.id
+    LEFT JOIN categories c ON p.categoryId = c.id
+    WHERE sm.type = 'out'
+    GROUP BY p.id, p.name, p.sku, c.name
+    ORDER BY totalSold DESC
+    LIMIT ?
+    `,
+    {
+      replacements: [limit],
+      type: 'SELECT',
+    }
+  );
+
+  return results.map((row: any) => ({
+    id: row.id,
+    name: row.name,
+    sku: row.sku,
+    category: row.category || 'Sin categoría',
+    totalSold: parseInt(row.totalSold),
+    totalRevenue: parseFloat(parseFloat(row.totalRevenue).toFixed(2)),
+    totalProfit: parseFloat(parseFloat(row.totalProfit).toFixed(2)),
+  }));
+};
+
+/**
+ * Get historical profit statistics based on sales (out movements)
+ */
+export const getProfitStats = async (days: number = 7) => {
+  const fromDate = new Date();
+  fromDate.setDate(fromDate.getDate() - days);
+  fromDate.setHours(0, 0, 0, 0);
+
+  const results = await sequelize.query(
+    `
+    SELECT 
+      DATE(sm.createdAt) as date,
+      SUM(sm.quantity * p.price) as revenue,
+      SUM(sm.quantity * p.cost) as costs,
+      SUM(sm.quantity * (p.price - p.cost)) as profit
+    FROM stock_movements sm
+    INNER JOIN products p ON sm.productId = p.id
+    WHERE sm.createdAt >= ? AND sm.type = 'out'
+    GROUP BY DATE(sm.createdAt)
+    ORDER BY date ASC
+    `,
+    {
+      replacements: [fromDate.toISOString()],
+      type: 'SELECT',
+    }
+  );
+
+  // Map to fill potentially missing days could be done here, 
+  // but we'll return raw for now (frontend can handle or just show available data poins)
+  return results.map((row: any) => ({
+    date: row.date,
+    revenue: parseFloat(parseFloat(row.revenue).toFixed(2)),
+    costs: parseFloat(parseFloat(row.costs).toFixed(2)),
+    profit: parseFloat(parseFloat(row.profit).toFixed(2)),
+  }));
+};

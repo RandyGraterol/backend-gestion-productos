@@ -95,12 +95,12 @@ export const deleteUploadedFile = (filePath: string): void => {
 
 /**
  * Helper function to get file URL
- * Generates the correct URL for accessing uploaded images
+ * Generates the correct URL for accessing uploaded images.
+ * Uses UPLOAD_BASE_URL from env config to ensure correct URL in all environments (dev, prod, behind proxy).
  */
-export const getFileUrl = (req: Request, filename: string): string => {
-  const protocol = req.protocol;
-  const host = req.get('host');
-  return `${protocol}://${host}/uploads/products/${filename}`;
+export const getFileUrl = (_req: Request, filename: string): string => {
+  const baseUrl = (config.upload.baseUrl || 'http://localhost:3010').replace(/\/$/, '');
+  return `${baseUrl}/uploads/products/${filename}`;
 };
 
 /**

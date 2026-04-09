@@ -7,6 +7,7 @@ import { errorHandler } from './middleware/errorHandler';
 import { logger } from './middleware/logger';
 import { AppError } from './types';
 import { config, validateEnv, printConfig } from './config/env';
+import { scheduleDailyRateUpdate } from './services/exchangeRateService';
 
 /**
  * Create Express application
@@ -130,6 +131,9 @@ const startServer = async () => {
     // Initialize database without forcing or altering
     console.log('Initializing database...');
     await initializeDatabase();
+
+    // Start the daily exchange rate scheduler (fetches immediately + schedules 00:00 daily)
+    scheduleDailyRateUpdate();
 
     // Start Express server
     app.listen(config.server.port, () => {

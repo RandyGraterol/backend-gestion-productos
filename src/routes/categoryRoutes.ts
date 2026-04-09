@@ -6,7 +6,7 @@ import {
   updateHandler,
   deleteHandler,
 } from '../controllers/categoryController';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate } from '../middleware/auth';
 import { validate } from '../middleware/validator';
 
 const router = Router();
@@ -25,12 +25,11 @@ router.get('/:id', authenticate, getByIdHandler);
 
 /**
  * POST /api/categories
- * Create a new category (admin/manager only)
+ * Create a new category
  */
 router.post(
   '/',
   authenticate,
-  authorize('admin', 'manager'),
   validate([
     { field: 'name', required: true, type: 'string', min: 1, max: 100 },
     { field: 'description', required: false, type: 'string' },
@@ -43,12 +42,11 @@ router.post(
 
 /**
  * PUT /api/categories/:id
- * Update category (admin/manager only)
+ * Update category
  */
 router.put(
   '/:id',
   authenticate,
-  authorize('admin', 'manager'),
   validate([
     { field: 'name', required: false, type: 'string', min: 1, max: 100 },
     { field: 'description', required: false, type: 'string' },
@@ -61,8 +59,8 @@ router.put(
 
 /**
  * DELETE /api/categories/:id
- * Delete category (admin/manager only)
+ * Delete category
  */
-router.delete('/:id', authenticate, authorize('admin', 'manager'), deleteHandler);
+router.delete('/:id', authenticate, deleteHandler);
 
 export default router;

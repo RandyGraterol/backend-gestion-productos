@@ -5,19 +5,18 @@ import {
   getMovementByIdHandler,
   getProductHistoryHandler,
 } from '../controllers/stockController';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate } from '../middleware/auth';
 import { validate } from '../middleware/validator';
 
 const router = Router();
 
 /**
  * POST /api/stock/movements
- * Create a new stock movement (admin/manager/employee only)
+ * Create a new stock movement
  */
 router.post(
   '/movements',
   authenticate,
-  authorize('admin', 'manager', 'employee'),
   validate([
     { field: 'productId', required: true, type: 'string' },
     { field: 'type', required: true, type: 'string' },

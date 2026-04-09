@@ -31,6 +31,17 @@ const cleanProductData = (data: any): any => {
 };
 
 /**
+ * Generate a unique SKU automatically
+ * Format: PRD-XXXXXX (6 alphanumeric chars from timestamp + random)
+ */
+const generateSKU = (): string => {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  const ts = Date.now().toString(36).toUpperCase().slice(-4);
+  const rand = Array.from({ length: 2 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+  return `PRD-${ts}${rand}`;
+};
+
+/**
  * Create a new product
  * @param productData - Product creation data
  * @returns Created product
@@ -41,7 +52,19 @@ export const createProduct = async (
   try {
     // Clean the data
     const cleanedData = cleanProductData(productData);
-    
+
+    // Auto-generate SKU if not provided
+    if (!cleanedData.sku) {
+      let sku = generateSKU();
+      // Ensure uniqueness (retry up to 5 times)
+      for (let i = 0; i < 5; i++) {
+        const existing = await Product.findOne({ where: { sku } });
+        if (!existing) break;
+        sku = generateSKU();
+      }
+      cleanedData.sku = sku;
+    }
+
     // Verify category exists
     const category = await Category.findByPk(cleanedData.categoryId);
     if (!category) {
@@ -52,7 +75,7 @@ export const createProduct = async (
     return product.toJSON();
   } catch (error: any) {
     if (error.name === 'SequelizeUniqueConstraintError') {
-      throw new AppError('SKU already exists', 409);
+      throw new AppError('Ya existe un producto con ese nombre o código', 409);
     }
     throw error;
   }

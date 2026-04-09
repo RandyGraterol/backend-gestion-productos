@@ -7,7 +7,7 @@ import {
   deleteHandler,
   searchHandler,
 } from '../controllers/productController';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate } from '../middleware/auth';
 import { upload } from '../config/multer';
 
 const router = Router();
@@ -32,34 +32,32 @@ router.get('/:id', authenticate, getByIdHandler);
 
 /**
  * POST /api/products
- * Create a new product (admin/manager only)
+ * Create a new product (all authenticated users)
  * Supports multipart/form-data with optional images
  */
 router.post(
   '/',
   authenticate,
-  authorize('admin', 'manager'),
   upload.array('images', 10), // Accept up to 10 images
   createHandler
 );
 
 /**
  * PUT /api/products/:id
- * Update product (admin/manager only)
+ * Update product (all authenticated users)
  * Supports multipart/form-data with optional images
  */
 router.put(
   '/:id',
   authenticate,
-  authorize('admin', 'manager'),
   upload.array('images', 10), // Accept up to 10 images
   updateHandler
 );
 
 /**
  * DELETE /api/products/:id
- * Delete product (admin only)
+ * Delete product (all authenticated users)
  */
-router.delete('/:id', authenticate, authorize('admin'), deleteHandler);
+router.delete('/:id', authenticate, deleteHandler);
 
 export default router;

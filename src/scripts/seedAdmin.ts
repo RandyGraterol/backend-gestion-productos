@@ -18,7 +18,7 @@ const envFile = process.env.NODE_ENV === 'production' ? '.env.production' : '.en
 dotenv.config({ path: path.resolve(process.cwd(), envFile) });
 
 /**
- * Admin user data
+ * Admin user data1
  * You can customize these values or use environment variables
  */
 const ADMIN_DATA = {
@@ -81,7 +81,7 @@ async function seedAdmin() {
     // Close database connection
     await sequelize.close();
     console.log('👋 Database connection closed');
-  }
+  }1
 }
 
 // Run seed if this file is executed directly

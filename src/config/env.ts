@@ -87,6 +87,7 @@ export const loggingConfig = {
  */
 export const uploadConfig = {
   dir: getEnv('UPLOAD_DIR', './uploads'),
+  baseUrl: getEnv('UPLOAD_BASE_URL', 'http://localhost:3010'),
   maxFileSize: getEnvNumber('MAX_FILE_SIZE', 5242880), // 5MB
   allowedTypes: getEnv('ALLOWED_FILE_TYPES', 'image/jpeg,image/png,image/gif,image/webp')
     .split(',')

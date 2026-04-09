@@ -129,3 +129,51 @@ export const getPriceDistributionHandler = async (_req: Request, res: Response) 
     });
   }
 };
+
+/**
+ * Get top selling products
+ * GET /api/dashboard/top-products?limit=5
+ */
+export const getTopSellingHandler = async (req: Request, res: Response) => {
+  try {
+    const limit = parseInt(req.query.limit as string) || 5;
+
+    const products = await dashboardService.getTopSellingProducts(limit);
+
+    res.json({
+      success: true,
+      data: products,
+    });
+  } catch (error) {
+    console.error('Error getting top selling products:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al obtener productos más vendidos',
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+};
+
+/**
+ * Get profit stats
+ * GET /api/dashboard/profits?days=7
+ */
+export const getProfitsHandler = async (req: Request, res: Response) => {
+  try {
+    const days = parseInt(req.query.days as string) || 7;
+
+    const stats = await dashboardService.getProfitStats(days);
+
+    res.json({
+      success: true,
+      data: stats,
+    });
+  } catch (error) {
+    console.error('Error getting profit stats:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error al obtener reporte de ganancias',
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+};

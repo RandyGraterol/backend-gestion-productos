@@ -8,6 +8,7 @@ import userRoutes from './userRoutes';
 import dashboardRoutes from './dashboardRoutes';
 import notificationRoutes from './notificationRoutes';
 import userNotificationRoutes from './userNotificationRoutes';
+import exchangeRateRoutes from './exchangeRateRoutes';
 
 const router = Router();
 
@@ -23,5 +24,6 @@ router.use('/users', userRoutes);
 router.use('/dashboard', dashboardRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/user-notifications', userNotificationRoutes);
+router.use('/exchange-rate', exchangeRateRoutes);
 
 export default router;

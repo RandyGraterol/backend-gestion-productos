@@ -6,6 +6,8 @@ import {
   getMovementStatsHandler,
   getLowStockHandler,
   getPriceDistributionHandler,
+  getTopSellingHandler,
+  getProfitsHandler,
 } from '../controllers/dashboardController';
 
 const router = Router();
@@ -29,5 +31,11 @@ router.get('/low-stock', authenticate, getLowStockHandler);
 
 // GET /api/dashboard/price-distribution - Get price distribution by category
 router.get('/price-distribution', authenticate, getPriceDistributionHandler);
+
+// GET /api/dashboard/top-products - Get top selling products
+router.get('/top-products', authenticate, getTopSellingHandler);
+
+// GET /api/dashboard/profits - Get profit statistics
+router.get('/profits', authenticate, getProfitsHandler);
 
 export default router;
