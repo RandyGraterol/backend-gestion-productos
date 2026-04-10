@@ -12,7 +12,8 @@
     "create-admin-simple": "ts-node src/scripts/createAdminSimple.ts",
     "seed": "ts-node src/scripts/seedDatabase.ts",
     "seed:admin": "ts-node src/scripts/seedAdmin.ts",
-    "migrate:expiry": "ts-node src/scripts/run-migration.ts"
+    "migrate:expiry": "ts-node src/scripts/run-migration.ts",
+    "clean:db": "ts-node src/scripts/cleanDatabase.ts"
   },
   "keywords": [
     "inventory",
