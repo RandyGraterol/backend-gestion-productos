@@ -99,8 +99,7 @@ export const deleteUploadedFile = (filePath: string): void => {
  * Uses UPLOAD_BASE_URL from env config to ensure correct URL in all environments (dev, prod, behind proxy).
  */
 export const getFileUrl = (_req: Request, filename: string): string => {
-  const baseUrl = (config.upload.baseUrl || 'http://localhost:3010').replace(/\/$/, '');
-  return `${baseUrl}/uploads/products/${filename}`;
+  return `/uploads/products/${filename}`;
 };
 
 /**

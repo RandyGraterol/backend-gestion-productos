@@ -56,12 +56,6 @@ StockMovement.init(
     quantity: {
       type: DataTypes.INTEGER,
       allowNull: false,
-      validate: {
-        min: {
-          args: [1],
-          msg: 'Quantity must be greater than 0',
-        },
-      },
     },
     previousStock: {
       type: DataTypes.INTEGER,

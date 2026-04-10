@@ -17,7 +17,7 @@ export const getExchangeRate = async (req: Request, res: Response): Promise<void
         bcv: rates.bcv,
         updatedAt: rates.updatedAt,
         fetchedDate: rates.fetchedDate,
-        source: 'alcambio.app',
+        source: 've.dolarapi.com',
         currency: 'VES', // Venezuelan Bolívares
         base: 'USD',
       },

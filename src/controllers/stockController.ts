@@ -12,10 +12,20 @@ export const createMovementHandler = async (
   next: NextFunction
 ): Promise<void> => {
   try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        error: 'User authentication required',
+      });
+      return;
+    }
+
     // Add userId from authenticated user
     const movementData = {
       ...req.body,
-      userId: req.user?.id,
+      userId,
     };
 
     const movement = await stockService.createStockMovement(movementData);
@@ -26,6 +36,7 @@ export const createMovementHandler = async (
       message: 'Stock movement created successfully',
     });
   } catch (error) {
+    console.error('[StockController] createMovement error:', error);
     next(error);
   }
 };

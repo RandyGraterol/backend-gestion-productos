@@ -7,16 +7,16 @@ import cron from 'node-cron';
  * Rate is fetched once daily at midnight (00:00) and cached until the next update.
  */
 
-const ALCAMBIO_API_URL = 'https://api.alcambio.app/graphql';
+const DOLAR_API_URL = 'https://ve.dolarapi.com/v1/dolares/oficial';
 
-interface ConversionRate {
-  baseValue: number;
-  official: boolean;
-  rateCurrency: {
-    code: string;
-    symbol: string;
-  };
-  type: string;
+interface DolarApiResponse {
+  moneda: string;
+  fuente: string;
+  nombre: string;
+  compra: number | null;
+  venta: number | null;
+  promedio: number;
+  fechaActualizacion: string;
 }
 
 export interface CachedRate {
@@ -26,24 +26,6 @@ export interface CachedRate {
 }
 
 let rateCache: CachedRate | null = null;
-
-const GRAPHQL_QUERY = `
-  query getCountryConversions($countryCode: String!) {
-    getCountryConversions(payload: { countryCode: $countryCode }) {
-      conversionRates {
-        baseValue
-        official
-        rateCurrency {
-          code
-          symbol
-        }
-        type
-      }
-    }
-  }
-`;
-
-
 
 /**
  * Round to exactly 2 decimal places
@@ -56,7 +38,7 @@ const round2 = (value: number): number => Math.round(value * 100) / 100;
 const todayStr = (): string => new Date().toISOString().split('T')[0];
 
 /**
- * Fetch exchange rates from alcambio.app GraphQL API
+ * Fetch exchange rates from dolarapi.com
  */
 export const fetchExchangeRates = async (force: boolean = false): Promise<CachedRate> => {
   // Return cached data if it was fetched today and force is false
@@ -66,36 +48,16 @@ export const fetchExchangeRates = async (force: boolean = false): Promise<Cached
   }
 
   try {
-    console.log('🌐 Fetching exchange rates from alcambio.app...');
+    console.log('🌐 Fetching official BCV exchange rate from dolarapi.com...');
 
-    const response = await axios.post(
-      ALCAMBIO_API_URL,
-      {
-        query: GRAPHQL_QUERY,
-        variables: { countryCode: 'VE' },
-        operationName: 'getCountryConversions',
-      },
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Origin': 'https://alcambio.app',
-          'Referer': 'https://alcambio.app/',
-        },
-        timeout: 10000,
-      }
-    );
+    const response = await axios.get<DolarApiResponse>(DOLAR_API_URL, {
+      timeout: 10000,
+    });
 
-    const conversionRates: ConversionRate[] =
-      response.data?.data?.getCountryConversions?.conversionRates ?? [];
-
-    // BCV rate: official === true, currency code === USD
-    const bcvRate = conversionRates.find(
-      (r) => r.official === true && r.rateCurrency?.code === 'USD'
-    );
+    const bcvRate = response.data?.promedio;
 
     rateCache = {
-      bcv: bcvRate ? round2(bcvRate.baseValue) : null,
+      bcv: bcvRate ? round2(bcvRate) : null,
       updatedAt: new Date().toISOString(),
       fetchedDate: todayStr(),
     };
@@ -103,7 +65,7 @@ export const fetchExchangeRates = async (force: boolean = false): Promise<Cached
     console.log(`✅ Exchange rate fetched: BCV=${rateCache.bcv} Bs/USD (${rateCache.fetchedDate})`);
     return rateCache;
   } catch (error) {
-    console.error('❌ Error fetching exchange rates from alcambio.app:', error);
+    console.error('❌ Error fetching exchange rates from dolarapi.com:', error);
 
     // Return stale cache if available (better than nothing)
     if (rateCache) {

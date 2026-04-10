@@ -26,12 +26,6 @@ export const createStockMovement = async (
       throw new AppError('Product not found', 404);
     }
 
-    // Verify user exists
-    const user = await User.findByPk(movementData.userId, { transaction });
-    if (!user) {
-      throw new AppError('User not found', 404);
-    }
-
     // Calculate new stock based on movement type
     const previousStock = product.stock;
     let newStock = previousStock;
@@ -44,8 +38,12 @@ export const createStockMovement = async (
         newStock = previousStock - movementData.quantity;
         break;
       case 'adjustment':
-        // For adjustments, quantity represents the final stock value
-        newStock = movementData.quantity;
+        // For adjustments, summing the quantity, or replace to exactly 0 if user passes 0
+        if (movementData.quantity === 0) {
+          newStock = 0;
+        } else {
+          newStock = previousStock + movementData.quantity;
+        }
         break;
       case 'transfer':
         // For transfers, we subtract the quantity
