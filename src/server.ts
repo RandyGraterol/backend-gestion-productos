@@ -16,33 +16,35 @@ const app = express();
 
 /**
  * Configure CORS
- * Configuración mejorada para manejar preflight requests
+ * Configuración unificada para requests normales y preflight OPTIONS
  */
-app.use(
-  cors({
-    origin: function (origin, callback) {
-      // Permitir requests sin origin (como mobile apps o curl)
-      if (!origin) return callback(null, true);
-      
-      // Verificar si el origin está en la lista permitida
-      const allowedOrigins = config.cors.origin;
-      if (allowedOrigins.indexOf(origin) !== -1) {
-        callback(null, true);
-      } else {
-        console.warn(`⚠️  CORS blocked request from origin: ${origin}`);
-        callback(new Error('Not allowed by CORS'));
-      }
-    },
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-    exposedHeaders: ['Content-Range', 'X-Content-Range'],
-    maxAge: 86400, // 24 horas
-  })
-);
+const corsOptions: cors.CorsOptions = {
+  origin: function (origin, callback) {
+    // Permitir requests sin origin (mobile apps, curl, Postman)
+    if (!origin) return callback(null, true);
 
-// Manejar explícitamente las peticiones OPTIONS (preflight)
-app.options('*', cors());
+    const allowedOrigins = config.cors.origin;
+
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      console.warn(`⚠️  CORS blocked request from origin: ${origin}`);
+      console.warn(`⚠️  Allowed origins: ${allowedOrigins.join(', ')}`);
+      callback(new Error(`CORS: origin "${origin}" not allowed`));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  exposedHeaders: ['Content-Range', 'X-Content-Range'],
+  maxAge: 86400, // 24 horas cache del preflight
+};
+
+// Aplicar CORS a todas las rutas
+app.use(cors(corsOptions));
+
+// Manejar preflight OPTIONS con la MISMA configuración (crítico para CORS)
+app.options('*', cors(corsOptions));
 
 /**
  * Body parser middleware
