@@ -61,7 +61,7 @@ export const databaseConfig = {
  */
 export const jwtConfig = {
   secret: getEnv('JWT_SECRET', 'your-secret-key-change-this-in-production'),
-  expiresIn: getEnv('JWT_EXPIRES_IN', '24h'),
+  expiresIn: getEnv('JWT_EXPIRES_IN', '30d'),
   refreshExpiresIn: getEnv('JWT_REFRESH_EXPIRES_IN', '7d'),
 };
 
