@@ -16,7 +16,7 @@ export const getDashboardStats = async (dateRange?: { from: Date; to: Date }) =>
   // Total active products
   const totalProducts = await Product.count({ where: { isActive: true } });
 
-  // Products with low stock
+  // Products with low stock (stock < minStock)
   const lowStockCount = await Product.count({
     where: {
       isActive: true,
@@ -24,17 +24,33 @@ export const getDashboardStats = async (dateRange?: { from: Date; to: Date }) =>
     },
   });
 
-  // Total inventory value
+  // Products out of stock (stock = 0)
+  const outOfStockCount = await Product.count({
+    where: {
+      isActive: true,
+      stock: 0,
+    },
+  });
+
+  // Total inventory value + potential profit
   const products = await Product.findAll({
     where: { isActive: true },
-    attributes: ['price', 'stock'],
+    attributes: ['price', 'stock', 'cost'],
   });
   const totalValue = products.reduce((sum, p) => sum + p.price * p.stock, 0);
+  const potentialProfit = products.reduce((sum, p) => sum + (p.price - p.cost) * p.stock, 0);
 
   // Total categories
   const totalCategories = await Category.count();
 
-  // Movement statistics
+  // Today's movements
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayMovements = await StockMovement.count({
+    where: { createdAt: { [Op.gte]: todayStart } },
+  });
+
+  // Movement statistics within date range
   const movementWhere: any = {};
   if (dateRange) {
     movementWhere.createdAt = {
@@ -58,8 +74,11 @@ export const getDashboardStats = async (dateRange?: { from: Date; to: Date }) =>
     totalProducts,
     activeProducts: totalProducts,
     lowStockCount,
+    outOfStockCount,
     totalValue: parseFloat(totalValue.toFixed(2)),
+    potentialProfit: parseFloat(potentialProfit.toFixed(2)),
     totalCategories,
+    todayMovements,
     movements: movementStats,
   };
 };

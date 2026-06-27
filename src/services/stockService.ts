@@ -3,6 +3,7 @@ import { sequelize } from '../config/database';
 import { StockMovement, Product, User } from '../models';
 import { StockMovementCreationAttributes, StockMovementAttributes, MovementType } from '../types';
 import { AppError } from '../types';
+import { getCachedRates } from './exchangeRateService';
 
 /**
  * Create a stock movement with atomic transaction
@@ -59,12 +60,17 @@ export const createStockMovement = async (
       );
     }
 
+    // Capture current BCV exchange rate for accounting traceability
+    const cached = getCachedRates();
+    const exchangeRate = cached?.bcv ?? undefined;
+
     // Create stock movement record
     const movement = await StockMovement.create(
       {
         ...movementData,
         previousStock,
         newStock,
+        exchangeRate,
       },
       { transaction }
     );

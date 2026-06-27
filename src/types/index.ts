@@ -141,6 +141,7 @@ export interface StockMovementAttributes {
   reason?: string;
   reference?: string;
   userId: string;
+  exchangeRate?: number;
   createdAt: Date;
 }
 
@@ -151,6 +152,7 @@ export interface StockMovementCreationAttributes {
   reason?: string;
   reference?: string;
   userId: string;
+  exchangeRate?: number;
 }
 
 // ============================================

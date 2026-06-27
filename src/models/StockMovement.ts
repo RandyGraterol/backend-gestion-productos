@@ -22,6 +22,7 @@ class StockMovement
   public newStock!: number;
   public reason?: string;
   public reference?: string;
+  public exchangeRate?: number;
   public userId!: string;
   public readonly createdAt!: Date;
 }
@@ -83,6 +84,10 @@ StockMovement.init(
     },
     reference: {
       type: DataTypes.STRING(100),
+      allowNull: true,
+    },
+    exchangeRate: {
+      type: DataTypes.DECIMAL(12, 2),
       allowNull: true,
     },
     userId: {
