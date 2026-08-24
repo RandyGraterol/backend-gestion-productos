@@ -5,10 +5,41 @@ import User from './User';
 import StockMovement from './StockMovement';
 import ProductImage from './ProductImage';
 import Notification from './Notification';
+import AppVersion from './AppVersion';
+import DownloadVerification from './DownloadVerification';
+import DonationMethod from './DonationMethod';
+import Donation from './Donation';
+import DownloadLog from './DownloadLog';
+import ContactMessage from './ContactMessage';
+import MembershipPayment from './MembershipPayment';
 
 /**
  * Define model associations
  */
+
+// User -> Product association
+User.hasMany(Product, {
+  foreignKey: 'userId',
+  as: 'products',
+  onDelete: 'CASCADE',
+});
+
+Product.belongsTo(User, {
+  foreignKey: 'userId',
+  as: 'user',
+});
+
+// User -> Category association
+User.hasMany(Category, {
+  foreignKey: 'userId',
+  as: 'categories',
+  onDelete: 'CASCADE',
+});
+
+Category.belongsTo(User, {
+  foreignKey: 'userId',
+  as: 'user',
+});
 
 // Category associations
 Category.hasMany(Product, {
@@ -78,6 +109,29 @@ StockMovement.belongsTo(User, {
   as: 'user',
 });
 
+// AppVersion associations
+AppVersion.belongsTo(User, {
+  foreignKey: 'uploadedBy',
+  as: 'uploader',
+});
+
+User.hasMany(AppVersion, {
+  foreignKey: 'uploadedBy',
+  as: 'appVersions',
+});
+
+// User -> MembershipPayment association
+User.hasMany(MembershipPayment, {
+  foreignKey: 'userId',
+  as: 'membershipPayments',
+  onDelete: 'CASCADE',
+});
+
+MembershipPayment.belongsTo(User, {
+  foreignKey: 'userId',
+  as: 'user',
+});
+
 /**
  * Initialize database
  * Syncs all models with the database
@@ -104,4 +158,4 @@ export const initializeDatabase = async (options: { force?: boolean; alter?: boo
 /**
  * Export all models
  */
-export { Category, Product, User, StockMovement, ProductImage, Notification, sequelize };
+export { Category, Product, User, StockMovement, ProductImage, Notification, AppVersion, DownloadVerification, DonationMethod, Donation, DownloadLog, ContactMessage, MembershipPayment, sequelize };

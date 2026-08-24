@@ -16,7 +16,7 @@ class StockMovement
 {
   public id!: string;
   public productId!: string;
-  public type!: 'in' | 'out' | 'adjustment' | 'transfer';
+  public type!: 'in' | 'out' | 'adjustment' | 'transfer' | 'credit';
   public quantity!: number;
   public previousStock!: number;
   public newStock!: number;
@@ -45,12 +45,12 @@ StockMovement.init(
       onUpdate: 'CASCADE',
     },
     type: {
-      type: DataTypes.ENUM('in', 'out', 'adjustment', 'transfer'),
+      type: DataTypes.ENUM('in', 'out', 'adjustment', 'transfer', 'credit'),
       allowNull: false,
       validate: {
         isIn: {
-          args: [['in', 'out', 'adjustment', 'transfer']],
-          msg: 'Type must be one of: in, out, adjustment, transfer',
+          args: [['in', 'out', 'adjustment', 'transfer', 'credit']],
+          msg: 'Type must be one of: in, out, adjustment, transfer, credit',
         },
       },
     },

@@ -8,6 +8,10 @@ export interface ProductImageAttributes {
   id: string;
   productId: string;
   imageUrl: string;
+  thumbnailUrl?: string | null;
+  storageProvider?: string | null;
+  publicId?: string | null;
+  thumbnailPublicId?: string | null;
   fileName: string;
   fileSize: number;
   mimeType: string;
@@ -34,6 +38,10 @@ class ProductImage
   public id!: string;
   public productId!: string;
   public imageUrl!: string;
+  public thumbnailUrl?: string | null;
+  public storageProvider?: string | null;
+  public publicId?: string | null;
+  public thumbnailPublicId?: string | null;
   public fileName!: string;
   public fileSize!: number;
   public mimeType!: string;
@@ -68,6 +76,23 @@ ProductImage.init(
           msg: 'Image URL cannot be empty',
         },
       },
+    },
+    thumbnailUrl: {
+      type: DataTypes.STRING(500),
+      allowNull: true,
+    },
+    storageProvider: {
+      type: DataTypes.STRING(20),
+      allowNull: false,
+      defaultValue: 'local',
+    },
+    publicId: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+    },
+    thumbnailPublicId: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
     },
     fileName: {
       type: DataTypes.STRING(255),

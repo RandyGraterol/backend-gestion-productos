@@ -4,7 +4,24 @@ import { Request } from 'express';
 // USER & AUTHENTICATION TYPES
 // ============================================
 
-export type UserRole = 'admin' | 'manager' | 'employee' | 'viewer';
+/**
+ * Roles del sistema multi-tenant:
+ * - admin: dueño del sistema, ve todo
+ * - client: cliente registrado, tiene su propio inventario
+ * - operator: creado por un client, trabaja el inventario de ese client
+ */
+export type UserRole = 'admin' | 'client' | 'operator';
+
+export type BusinessType =
+  | 'bodega'
+  | 'licoreria'
+  | 'abasto'
+  | 'supermercado'
+  | 'farmacia'
+  | 'otro';
+
+export type PlanType = 'mensual' | 'anual' | 'lifetime' | null;
+export type PlanStatus = 'activo' | 'pendiente' | 'expirado' | null;
 
 export interface UserAttributes {
   id: string;
@@ -12,8 +29,23 @@ export interface UserAttributes {
   password: string;
   name: string;
   role: UserRole;
+  /** Cliente dueño del inventario (solo para operators) */
+  ownerId?: string | null;
+  /** Nombre del cliente dueño (solo lectura, para operadores) */
+  ownerName?: string | null;
+  phone?: string | null;
+  businessType?: BusinessType | null;
+  emailVerified: boolean;
   avatar?: string;
   isActive: boolean;
+  /** Tipo de plan contratado */
+  plan?: PlanType;
+  /** Estado del plan */
+  planStatus?: PlanStatus;
+  /** Fecha de expiración del plan */
+  planExpiry?: Date | null;
+  /** Fecha de inicio del periodo de prueba gratuito (30 días) */
+  trialStartDate?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -23,6 +55,11 @@ export interface UserCreationAttributes {
   password: string;
   name: string;
   role: UserRole;
+  /** Cliente que crea al operador */
+  ownerId?: string | null;
+  phone?: string | null;
+  businessType?: BusinessType | null;
+  emailVerified?: boolean;
   avatar?: string;
   isActive?: boolean;
 }
@@ -36,6 +73,7 @@ export type UserResponse = Omit<UserAttributes, 'password'>;
 
 export interface ProductAttributes {
   id: string;
+  userId: string;
   sku: string;
   name: string;
   description?: string;
@@ -44,6 +82,7 @@ export interface ProductAttributes {
   unit: string;
   price: number;
   cost: number;
+  currency: 'USD' | 'VES';
   stock: number;
   minStock: number;
   maxStock?: number;
@@ -57,6 +96,7 @@ export interface ProductAttributes {
 }
 
 export interface ProductCreationAttributes {
+  userId: string;
   sku: string;
   name: string;
   description?: string;
@@ -65,6 +105,7 @@ export interface ProductCreationAttributes {
   unit: string;
   price: number;
   cost: number;
+  currency?: 'USD' | 'VES';
   stock: number;
   minStock: number;
   maxStock?: number;
@@ -108,6 +149,7 @@ export interface ProductImageCreationAttributes {
 
 export interface CategoryAttributes {
   id: string;
+  userId: string;
   name: string;
   description?: string;
   parentId?: string;
@@ -118,6 +160,7 @@ export interface CategoryAttributes {
 }
 
 export interface CategoryCreationAttributes {
+  userId: string;
   name: string;
   description?: string;
   parentId?: string;
@@ -129,7 +172,7 @@ export interface CategoryCreationAttributes {
 // STOCK MOVEMENT TYPES
 // ============================================
 
-export type MovementType = 'in' | 'out' | 'adjustment' | 'transfer';
+export type MovementType = 'in' | 'out' | 'adjustment' | 'transfer' | 'credit';
 
 export interface StockMovementAttributes {
   id: string;
@@ -205,6 +248,8 @@ export interface JwtPayload {
   email: string;
   name: string;
   role: UserRole;
+  /** Cliente dueño del inventario cuando el rol es operator */
+  ownerId?: string | null;
 }
 
 // ============================================

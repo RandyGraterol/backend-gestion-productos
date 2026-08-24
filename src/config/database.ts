@@ -2,11 +2,9 @@ import { Sequelize } from 'sequelize';
 import { config } from './env';
 
 /**
- * Sequelize instance for SQLite3 database
+ * Sequelize instance - supports PostgreSQL and SQLite
  */
-export const sequelize = new Sequelize({
-  dialect: 'sqlite',
-  storage: config.database.path,
+const sequelizeConfig: any = {
   logging: config.database.logging ? console.log : false,
   define: {
     timestamps: true,
@@ -14,12 +12,33 @@ export const sequelize = new Sequelize({
     freezeTableName: false,
   },
   pool: {
-    max: 5,
-    min: 0,
+    max: 10,
+    min: 2,
     acquire: 30000,
     idle: 10000,
   },
-});
+};
+
+// Use PostgreSQL in production, SQLite in development
+if (config.database.dialect === 'postgres') {
+  sequelizeConfig.dialect = 'postgres';
+  sequelizeConfig.host = config.database.host;
+  sequelizeConfig.port = config.database.port;
+  sequelizeConfig.database = config.database.name;
+  sequelizeConfig.username = config.database.user;
+  sequelizeConfig.password = config.database.password;
+  sequelizeConfig.dialectOptions = {
+    ssl: config.database.ssl ? {
+      require: true,
+      rejectUnauthorized: false,
+    } : false,
+  };
+} else {
+  sequelizeConfig.dialect = 'sqlite';
+  sequelizeConfig.storage = config.database.path;
+}
+
+export const sequelize = new Sequelize(sequelizeConfig);
 
 /**
  * Test database connection

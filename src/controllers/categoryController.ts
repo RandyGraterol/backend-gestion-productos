@@ -1,17 +1,26 @@
-import { Request, Response, NextFunction } from 'express';
+import { Response, NextFunction } from 'express';
+import { AuthRequest } from '../types';
 import * as categoryService from '../services/categoryService';
+import { resolveTenantId, resolveTenantIdWithBypass } from '../utils/tenant';
 
 /**
  * Create a new category
  * POST /api/categories
  */
 export const createHandler = async (
-  req: Request,
+  req: AuthRequest,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
   try {
-    const category = await categoryService.createCategory(req.body);
+    const userId = resolveTenantId(req.user!);
+    if (!userId) {
+      res.status(401).json({ success: false, error: 'User authentication required' });
+      return;
+    }
+
+    const categoryData = { ...req.body, userId };
+    const category = await categoryService.createCategory(categoryData);
 
     res.status(201).json({
       success: true,
@@ -24,20 +33,31 @@ export const createHandler = async (
 };
 
 /**
- * Get all categories
+ * Get all categories for the authenticated user
  * GET /api/categories
  */
 export const getAllHandler = async (
-  _req: Request,
+  req: AuthRequest,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
   try {
-    const categories = await categoryService.getAllCategories();
+    const userId = resolveTenantIdWithBypass(req.user!, req.query.tenantId as string | undefined);
+    if (!userId) {
+      res.status(401).json({ success: false, error: 'User authentication required' });
+      return;
+    }
+
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 50;
+    const search = req.query.search as string;
+
+    const result = await categoryService.getAllCategories(userId, page, limit, search);
 
     res.status(200).json({
       success: true,
-      data: categories,
+      data: result.data,
+      pagination: result.pagination,
     });
   } catch (error) {
     next(error);
@@ -49,12 +69,13 @@ export const getAllHandler = async (
  * GET /api/categories/:id
  */
 export const getByIdHandler = async (
-  req: Request,
+  req: AuthRequest,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
   try {
-    const category = await categoryService.getCategoryById(req.params.id);
+    const userId = resolveTenantId(req.user!);
+    const category = await categoryService.getCategoryById(req.params.id, userId);
 
     res.status(200).json({
       success: true,
@@ -70,12 +91,18 @@ export const getByIdHandler = async (
  * PUT /api/categories/:id
  */
 export const updateHandler = async (
-  req: Request,
+  req: AuthRequest,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
   try {
-    const category = await categoryService.updateCategory(req.params.id, req.body);
+    const userId = resolveTenantId(req.user!);
+    if (!userId) {
+      res.status(401).json({ success: false, error: 'User authentication required' });
+      return;
+    }
+
+    const category = await categoryService.updateCategory(req.params.id, req.body, userId);
 
     res.status(200).json({
       success: true,
@@ -92,12 +119,13 @@ export const updateHandler = async (
  * DELETE /api/categories/:id
  */
 export const deleteHandler = async (
-  req: Request,
+  req: AuthRequest,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
   try {
-    await categoryService.deleteCategory(req.params.id);
+    const userId = resolveTenantId(req.user!);
+    await categoryService.deleteCategory(req.params.id, userId);
 
     res.status(204).send();
   } catch (error) {

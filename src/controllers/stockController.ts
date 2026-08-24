@@ -1,6 +1,7 @@
-import { Request, Response, NextFunction } from 'express';
+import { Response, NextFunction } from 'express';
 import * as stockService from '../services/stockService';
 import { AuthRequest } from '../types';
+import { resolveTenantId, resolveTenantIdWithBypass } from '../utils/tenant';
 
 /**
  * Create a stock movement
@@ -12,7 +13,7 @@ export const createMovementHandler = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const userId = req.user?.id;
+    const userId = resolveTenantId(req.user!);
 
     if (!userId) {
       res.status(401).json({
@@ -46,26 +47,36 @@ export const createMovementHandler = async (
  * GET /api/stock/movements
  */
 export const getMovementsHandler = async (
-  req: Request,
+  req: AuthRequest,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
   try {
+    const userId = resolveTenantIdWithBypass(req.user!, req.query.tenantId as string | undefined);
+    if (!userId) {
+      res.status(401).json({ success: false, error: 'User authentication required' });
+      return;
+    }
+
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 20;
+
     const filters = {
       productId: req.query.productId as string,
-      userId: req.query.userId as string,
+      userId, // Always filter by authenticated user
       type: req.query.type as any,
       dateFrom: req.query.dateFrom ? new Date(req.query.dateFrom as string) : undefined,
       dateTo: req.query.dateTo ? new Date(req.query.dateTo as string) : undefined,
-      limit: req.query.limit ? parseInt(req.query.limit as string) : undefined,
-      offset: req.query.offset ? parseInt(req.query.offset as string) : undefined,
+      page,
+      limit,
     };
 
-    const movements = await stockService.getStockMovements(filters);
+    const result = await stockService.getStockMovements(filters);
 
     res.status(200).json({
       success: true,
-      data: movements,
+      data: result.data,
+      pagination: result.pagination,
     });
   } catch (error) {
     next(error);
@@ -77,12 +88,13 @@ export const getMovementsHandler = async (
  * GET /api/stock/movements/:id
  */
 export const getMovementByIdHandler = async (
-  req: Request,
+  req: AuthRequest,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
   try {
-    const movement = await stockService.getStockMovementById(req.params.id);
+    const userId = resolveTenantId(req.user!);
+    const movement = await stockService.getStockMovementById(req.params.id, userId);
 
     res.status(200).json({
       success: true,
@@ -98,13 +110,14 @@ export const getMovementByIdHandler = async (
  * GET /api/stock/products/:productId/history
  */
 export const getProductHistoryHandler = async (
-  req: Request,
+  req: AuthRequest,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
   try {
+    const userId = resolveTenantId(req.user!);
     const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
-    const movements = await stockService.getProductStockHistory(req.params.productId, limit);
+    const movements = await stockService.getProductStockHistory(req.params.productId, limit, userId);
 
     res.status(200).json({
       success: true,

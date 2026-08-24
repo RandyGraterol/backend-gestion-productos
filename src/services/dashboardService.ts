@@ -6,56 +6,70 @@ import StockMovement from '../models/StockMovement';
 
 /**
  * Dashboard Service
- * Provides statistics and analytics for the dashboard
+ * Provides statistics and analytics for the dashboard — filtered by userId
  */
 
 /**
- * Get general dashboard statistics
+ * Get general dashboard statistics for a specific user
  */
-export const getDashboardStats = async (dateRange?: { from: Date; to: Date }) => {
-  // Total active products
-  const totalProducts = await Product.count({ where: { isActive: true } });
+export const getDashboardStats = async (userId: string, dateRange?: { from: Date; to: Date }) => {
+  // Total active products for this user
+  const totalProducts = await Product.count({ where: { userId, isActive: true } });
 
-  // Products with low stock (stock < minStock)
+  // Products with low stock (stock < minStock) for this user
   const lowStockCount = await Product.count({
     where: {
+      userId,
       isActive: true,
       stock: { [Op.lt]: sequelize.col('minStock') },
     },
   });
 
-  // Products out of stock (stock = 0)
+  // Products out of stock for this user
   const outOfStockCount = await Product.count({
-    where: {
-      isActive: true,
-      stock: 0,
-    },
+    where: { userId, isActive: true, stock: 0 },
   });
 
-  // Total inventory value + potential profit
+  // Total inventory value for this user
   const products = await Product.findAll({
-    where: { isActive: true },
+    where: { userId, isActive: true },
     attributes: ['price', 'stock', 'cost'],
   });
   const totalValue = products.reduce((sum, p) => sum + p.price * p.stock, 0);
   const potentialProfit = products.reduce((sum, p) => sum + (p.price - p.cost) * p.stock, 0);
 
-  // Total categories
-  const totalCategories = await Category.count();
+  // Total categories for this user
+  const totalCategories = await Category.count({ where: { userId } });
 
-  // Today's movements
+  // Recent movements for this user (last 7 days)
+  const weekAgo = new Date();
+  weekAgo.setDate(weekAgo.getDate() - 7);
+  const recentMovements = await StockMovement.count({
+    where: { userId, createdAt: { [Op.gte]: weekAgo } },
+  });
+
+  // Today's movements for this user
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
   const todayMovements = await StockMovement.count({
-    where: { createdAt: { [Op.gte]: todayStart } },
+    where: { userId, createdAt: { [Op.gte]: todayStart } },
+  });
+
+  // Expiring products for this user (within 7 days)
+  const sevenDaysFromNow = new Date();
+  sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
+  const expiringCount = await Product.count({
+    where: {
+      userId,
+      isActive: true,
+      expiryDate: { [Op.between]: [new Date(), sevenDaysFromNow] },
+    },
   });
 
   // Movement statistics within date range
-  const movementWhere: any = {};
+  const movementWhere: any = { userId };
   if (dateRange) {
-    movementWhere.createdAt = {
-      [Op.between]: [dateRange.from, dateRange.to],
-    };
+    movementWhere.createdAt = { [Op.between]: [dateRange.from, dateRange.to] };
   }
 
   const movements = await StockMovement.findAll({
@@ -75,38 +89,38 @@ export const getDashboardStats = async (dateRange?: { from: Date; to: Date }) =>
     activeProducts: totalProducts,
     lowStockCount,
     outOfStockCount,
+    totalStockValue: parseFloat(totalValue.toFixed(2)),
     totalValue: parseFloat(totalValue.toFixed(2)),
     potentialProfit: parseFloat(potentialProfit.toFixed(2)),
     totalCategories,
+    recentMovements,
     todayMovements,
+    expiringCount,
     movements: movementStats,
   };
 };
 
 /**
- * Get category statistics with product counts and values
+ * Get category statistics for a specific user
  */
-export const getCategoryStats = async () => {
+export const getCategoryStats = async (userId: string) => {
   const results = await sequelize.query(
     `
     SELECT 
-      c.id,
-      c.name,
-      c.icon,
-      c.color,
-      COUNT(p.id) as productCount,
-      COALESCE(SUM(p.stock), 0) as totalStock,
-      COALESCE(SUM(p.price * p.stock), 0) as totalValue,
-      COALESCE(AVG(p.price), 0) as avgPrice,
-      COALESCE(AVG(p.cost), 0) as avgCost,
-      COALESCE(AVG(p.price - p.cost), 0) as margin
-    FROM categories c
-    LEFT JOIN products p ON c.id = p.categoryId AND p.isActive = 1
-    GROUP BY c.id, c.name, c.icon, c.color
-    HAVING productCount > 0
-    ORDER BY totalValue DESC
+      c."id",
+      c."name",
+      c."icon",
+      c."color",
+      COUNT(p."id") as "productCount",
+      COALESCE(SUM(p."stock"), 0) as "totalStock",
+      COALESCE(SUM(p."price" * p."stock"), 0) as "totalValue"
+    FROM "categories" c
+    LEFT JOIN "products" p ON c."id" = p."categoryId" AND p."isActive" = true
+    WHERE c."userId" = :userId
+    GROUP BY c."id", c."name", c."icon", c."color"
+    ORDER BY "totalValue" DESC
     `,
-    { type: 'SELECT' }
+    { replacements: { userId }, type: 'SELECT' }
   );
 
   return results.map((row: any) => ({
@@ -117,19 +131,13 @@ export const getCategoryStats = async () => {
     productCount: parseInt(row.productCount),
     totalStock: parseInt(row.totalStock),
     totalValue: parseFloat(parseFloat(row.totalValue).toFixed(2)),
-    avgPrice: parseFloat(parseFloat(row.avgPrice).toFixed(2)),
-    avgCost: parseFloat(parseFloat(row.avgCost).toFixed(2)),
-    margin: parseFloat(parseFloat(row.margin).toFixed(2)),
-    marginPercentage: row.avgCost > 0 
-      ? parseFloat(((row.margin / row.avgCost) * 100).toFixed(2))
-      : 0,
   }));
 };
 
 /**
- * Get stock movement statistics by date
+ * Get stock movement statistics by date for a specific user
  */
-export const getMovementStats = async (days: number = 7) => {
+export const getMovementStats = async (userId: string, days: number = 7) => {
   const fromDate = new Date();
   fromDate.setDate(fromDate.getDate() - days);
   fromDate.setHours(0, 0, 0, 0);
@@ -137,23 +145,22 @@ export const getMovementStats = async (days: number = 7) => {
   const results = await sequelize.query(
     `
     SELECT 
-      DATE(createdAt) as date,
-      SUM(CASE WHEN type = 'in' THEN quantity ELSE 0 END) as entries,
-      SUM(CASE WHEN type = 'out' THEN quantity ELSE 0 END) as exits,
-      SUM(CASE WHEN type = 'adjustment' THEN ABS(quantity) ELSE 0 END) as adjustments
-    FROM stock_movements
-    WHERE createdAt >= ?
-    GROUP BY DATE(createdAt)
-    ORDER BY date ASC
+      DATE("createdAt") as "date",
+      COUNT(*) as "count",
+      SUM(CASE WHEN "type" = 'in' THEN "quantity" ELSE 0 END) as "entries",
+      SUM(CASE WHEN "type" = 'out' THEN "quantity" ELSE 0 END) as "exits",
+      SUM(CASE WHEN "type" = 'adjustment' THEN ABS("quantity") ELSE 0 END) as "adjustments"
+    FROM "stock_movements"
+    WHERE "createdAt" >= :fromDate AND "userId" = :userId
+    GROUP BY DATE("createdAt")
+    ORDER BY "date" ASC
     `,
-    {
-      replacements: [fromDate.toISOString()],
-      type: 'SELECT',
-    }
+    { replacements: { fromDate: fromDate.toISOString(), userId }, type: 'SELECT' }
   );
 
   return results.map((row: any) => ({
     date: row.date,
+    count: parseInt(row.count),
     entries: parseInt(row.entries),
     exits: parseInt(row.exits),
     adjustments: parseInt(row.adjustments),
@@ -161,29 +168,85 @@ export const getMovementStats = async (days: number = 7) => {
 };
 
 /**
- * Get products with low stock
+ * Get products with low stock for a specific user
  */
-export const getLowStockProducts = async (limit: number = 10) => {
+export const getLowStockProducts = async (userId: string, limit: number = 10) => {
+  const products = await Product.findAll({
+    where: {
+      userId,
+      isActive: true,
+      stock: { [Op.lt]: sequelize.col('minStock') },
+    },
+    include: [{ model: Category, as: 'category', attributes: ['id', 'name'] }],
+    order: [['stock', 'ASC']],
+    limit,
+  });
+
+  return products.map(p => p.toJSON());
+};
+
+/**
+ * Get top products by stock for a specific user
+ */
+export const getTopProducts = async (userId: string, limit: number = 5) => {
+  const products = await Product.findAll({
+    where: { userId, isActive: true },
+    include: [{ model: Category, as: 'category', attributes: ['id', 'name'] }],
+    order: [['stock', 'DESC']],
+    limit,
+  });
+
+  return products.map(p => p.toJSON());
+};
+
+/**
+ * Get price distribution by category for a specific user
+ */
+export const getPriceDistribution = async (userId: string) => {
   const results = await sequelize.query(
     `
     SELECT 
-      p.id,
-      p.name,
-      p.sku,
-      p.stock,
-      p.minStock,
-      (p.stock * 100.0 / p.minStock) as percentage,
-      c.name as category
-    FROM products p
-    LEFT JOIN categories c ON p.categoryId = c.id
-    WHERE p.isActive = 1 AND p.stock < p.minStock
-    ORDER BY percentage ASC
-    LIMIT ?
+      c."name" as "category",
+      COALESCE(AVG(p."price"), 0) as "avgPrice",
+      COALESCE(SUM(p."price" * p."stock"), 0) as "totalValue",
+      COUNT(p."id") as "productCount"
+    FROM "categories" c
+    LEFT JOIN "products" p ON c."id" = p."categoryId" AND p."isActive" = true
+    WHERE c."userId" = :userId
+    GROUP BY c."id", c."name"
+    HAVING COUNT(p."id") > 0
+    ORDER BY "totalValue" DESC
     `,
-    {
-      replacements: [limit],
-      type: 'SELECT',
-    }
+    { replacements: { userId }, type: 'SELECT' }
+  );
+
+  return results.map((row: any) => ({
+    category: row.category,
+    avgPrice: parseFloat(parseFloat(row.avgPrice).toFixed(2)),
+    totalValue: parseFloat(parseFloat(row.totalValue).toFixed(2)),
+    productCount: parseInt(row.productCount),
+  }));
+};
+
+/**
+ * Get top selling products for a specific user
+ */
+export const getTopSellingProducts = async (userId: string, limit: number = 5) => {
+  const results = await sequelize.query(
+    `
+    SELECT 
+      p."id",
+      p."name",
+      p."sku",
+      p."stock",
+      c."name" as "category"
+    FROM "products" p
+    LEFT JOIN "categories" c ON p."categoryId" = c."id"
+    WHERE p."userId" = :userId AND p."isActive" = true
+    ORDER BY p."stock" DESC
+    LIMIT :limit
+    `,
+    { replacements: { userId, limit }, type: 'SELECT' }
   );
 
   return results.map((row: any) => ({
@@ -191,90 +254,14 @@ export const getLowStockProducts = async (limit: number = 10) => {
     name: row.name,
     sku: row.sku,
     stock: parseInt(row.stock),
-    minStock: parseInt(row.minStock),
-    percentage: parseFloat(parseFloat(row.percentage).toFixed(2)),
     category: row.category || 'Sin categoría',
   }));
 };
 
 /**
- * Get price distribution by category
+ * Get profit stats for a specific user
  */
-export const getPriceDistribution = async () => {
-  const results = await sequelize.query(
-    `
-    SELECT 
-      c.name as category,
-      COALESCE(AVG(p.price), 0) as avgPrice,
-      COALESCE(AVG(p.cost), 0) as avgCost,
-      COALESCE(AVG(p.price - p.cost), 0) as margin,
-      COALESCE(SUM(p.price * p.stock), 0) as totalValue,
-      COUNT(p.id) as productCount
-    FROM categories c
-    LEFT JOIN products p ON c.id = p.categoryId AND p.isActive = 1
-    GROUP BY c.id, c.name
-    HAVING productCount > 0
-    ORDER BY totalValue DESC
-    `,
-    { type: 'SELECT' }
-  );
-
-  return results.map((row: any) => ({
-    category: row.category,
-    avgPrice: parseFloat(parseFloat(row.avgPrice).toFixed(2)),
-    avgCost: parseFloat(parseFloat(row.avgCost).toFixed(2)),
-    margin: parseFloat(parseFloat(row.margin).toFixed(2)),
-    marginPercentage: row.avgCost > 0
-      ? parseFloat(((row.margin / row.avgCost) * 100).toFixed(2))
-      : 0,
-    totalValue: parseFloat(parseFloat(row.totalValue).toFixed(2)),
-    productCount: parseInt(row.productCount),
-  }));
-};
-
-/**
- * Get top selling products based on stock movements (out)
- */
-export const getTopSellingProducts = async (limit: number = 5) => {
-  const results = await sequelize.query(
-    `
-    SELECT 
-      p.id,
-      p.name,
-      p.sku,
-      c.name as category,
-      SUM(sm.quantity) as totalSold,
-      SUM(sm.quantity * p.price) as totalRevenue,
-      SUM(sm.quantity * (p.price - p.cost)) as totalProfit
-    FROM stock_movements sm
-    INNER JOIN products p ON sm.productId = p.id
-    LEFT JOIN categories c ON p.categoryId = c.id
-    WHERE sm.type = 'out'
-    GROUP BY p.id, p.name, p.sku, c.name
-    ORDER BY totalSold DESC
-    LIMIT ?
-    `,
-    {
-      replacements: [limit],
-      type: 'SELECT',
-    }
-  );
-
-  return results.map((row: any) => ({
-    id: row.id,
-    name: row.name,
-    sku: row.sku,
-    category: row.category || 'Sin categoría',
-    totalSold: parseInt(row.totalSold),
-    totalRevenue: parseFloat(parseFloat(row.totalRevenue).toFixed(2)),
-    totalProfit: parseFloat(parseFloat(row.totalProfit).toFixed(2)),
-  }));
-};
-
-/**
- * Get historical profit statistics based on sales (out movements)
- */
-export const getProfitStats = async (days: number = 7) => {
+export const getProfitStats = async (userId: string, days: number = 7) => {
   const fromDate = new Date();
   fromDate.setDate(fromDate.getDate() - days);
   fromDate.setHours(0, 0, 0, 0);
@@ -282,24 +269,19 @@ export const getProfitStats = async (days: number = 7) => {
   const results = await sequelize.query(
     `
     SELECT 
-      DATE(sm.createdAt) as date,
-      SUM(sm.quantity * p.price) as revenue,
-      SUM(sm.quantity * p.cost) as costs,
-      SUM(sm.quantity * (p.price - p.cost)) as profit
-    FROM stock_movements sm
-    INNER JOIN products p ON sm.productId = p.id
-    WHERE sm.createdAt >= ? AND sm.type = 'out'
-    GROUP BY DATE(sm.createdAt)
-    ORDER BY date ASC
+      DATE(sm."createdAt") as "date",
+      SUM(sm."quantity" * p."price") as "revenue",
+      SUM(sm."quantity" * p."cost") as "costs",
+      SUM(sm."quantity" * (p."price" - p."cost")) as "profit"
+    FROM "stock_movements" sm
+    INNER JOIN "products" p ON sm."productId" = p."id"
+    WHERE sm."createdAt" >= :fromDate AND sm."type" = 'out' AND sm."userId" = :userId
+    GROUP BY DATE(sm."createdAt")
+    ORDER BY "date" ASC
     `,
-    {
-      replacements: [fromDate.toISOString()],
-      type: 'SELECT',
-    }
+    { replacements: { fromDate: fromDate.toISOString(), userId }, type: 'SELECT' }
   );
 
-  // Map to fill potentially missing days could be done here, 
-  // but we'll return raw for now (frontend can handle or just show available data poins)
   return results.map((row: any) => ({
     date: row.date,
     revenue: parseFloat(parseFloat(row.revenue).toFixed(2)),

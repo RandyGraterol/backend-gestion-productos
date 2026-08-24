@@ -1,0 +1,141 @@
+# ============================================
+# InventarioApp - Docker Compose
+# Backend + PostgreSQL + Redis
+# ============================================
+
+services:
+  # ============================================
+  # PostgreSQL Database
+  # ============================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: inventario-postgres
+    restart: unless-stopped
+    ports:
+      - "5435:5432"  # Puerto 5435 para evitar conflictos
+    environment:
+      POSTGRES_DB: inventario_db
+      POSTGRES_USER: inventario_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-inventario_secure_2026}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - inventario-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U inventario_user -d inventario_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ============================================
+  # Redis Cache
+  # ============================================
+  redis:
+    image: redis:7-alpine
+    container_name: inventario-redis
+    restart: unless-stopped
+    ports:
+      - "6383:6379"  # Puerto 6383 para evitar conflictos
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    networks:
+      - inventario-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================
+  # Backend API
+  # ============================================
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: inventario-backend
+    restart: unless-stopped
+    ports:
+      - "3010:3010"
+    environment:
+      # Server
+      NODE_ENV: production
+      PORT: 3010
+      HOST: 0.0.0.0
+
+      # PostgreSQL
+      DB_DIALECT: postgres
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: inventario_db
+      DB_USER: inventario_user
+      DB_PASSWORD: ${DB_PASSWORD:-inventario_secure_2026}
+
+      # Redis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_ENABLED: true
+
+      # JWT
+      JWT_SECRET: ${JWT_SECRET:-your-super-secret-key-change-this-in-production-2026}
+      JWT_EXPIRES_IN: 1h
+      JWT_REFRESH_EXPIRES_IN: 30d
+
+      # CORS
+      CORS_ORIGIN: http://localhost:8080,https://administracionurbantaxis.com
+
+      # Security
+      RATE_LIMIT_ENABLED: "true"
+      RATE_LIMIT_MAX: 100
+      RATE_LIMIT_WINDOW: 15
+      HELMET_ENABLED: "true"
+
+      # Upload
+      UPLOAD_DIR: ./uploads
+      MAX_FILE_SIZE: 5242880
+
+      # Logging
+      LOG_LEVEL: info
+      DB_LOGGING: "false"
+
+      # Database sync (disable in production, use migrations instead)
+      DB_SYNC: "false"
+      DB_FORCE_SYNC: "false"
+
+      # Email - códigos de un solo uso para descargas
+      # Configura estas variables en un archivo .env junto a este docker-compose
+      # (EMAIL_USER y EMAIL_PASSWORD con tu correo y contraseña de aplicación)
+      EMAIL_ENABLED: ${EMAIL_ENABLED:-false}
+      EMAIL_HOST: ${EMAIL_HOST:-smtp.gmail.com}
+      EMAIL_PORT: ${EMAIL_PORT:-587}
+      EMAIL_SECURE: ${EMAIL_SECURE:-false}
+      EMAIL_USER: ${EMAIL_USER:-}
+      EMAIL_PASSWORD: ${EMAIL_PASSWORD:-}
+      EMAIL_FROM: ${EMAIL_FROM:-Inventario Santiago <noreply@inventariosantiago.com>}
+    volumes:
+      - uploads_data:/app/uploads
+      - backups_data:/app/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - inventario-network
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  uploads_data:
+    driver: local
+  backups_data:
+    driver: local
+
+networks:
+  inventario-network:
+    driver: bridge

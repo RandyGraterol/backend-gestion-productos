@@ -3,13 +3,24 @@ import { JwtPayload } from '../types';
 import { config } from '../config/env';
 
 /**
- * Generate a JWT token for a user
- * @param payload - User information to encode in token
- * @returns JWT token string
+ * Generate an access token (short-lived: 1 hour)
+ * @param payload - User information to encode
+ * @returns JWT access token
  */
 export const generateToken = (payload: JwtPayload): string => {
   return jwt.sign(payload, config.jwt.secret, {
-    expiresIn: config.jwt.expiresIn,
+    expiresIn: '1h',
+  } as any);
+};
+
+/**
+ * Generate a refresh token (long-lived: 30 days)
+ * @param payload - User information to encode
+ * @returns JWT refresh token
+ */
+export const generateRefreshToken = (payload: JwtPayload): string => {
+  return jwt.sign(payload, config.jwt.secret, {
+    expiresIn: '30d',
   } as any);
 };
 

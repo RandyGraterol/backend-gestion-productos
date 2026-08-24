@@ -15,6 +15,7 @@ class Category
   implements CategoryAttributes
 {
   public id!: string;
+  public userId!: string;
   public name!: string;
   public description?: string;
   public parentId?: string;
@@ -31,10 +32,20 @@ Category.init(
       defaultValue: DataTypes.UUIDV4,
       primaryKey: true,
     },
+    userId: {
+      type: DataTypes.UUID,
+      allowNull: false,
+      references: {
+        model: 'users',
+        key: 'id',
+      },
+      onDelete: 'CASCADE',
+      onUpdate: 'CASCADE',
+    },
     name: {
       type: DataTypes.STRING(100),
       allowNull: false,
-      unique: true,
+      unique: false,
       validate: {
         notEmpty: {
           msg: 'Category name cannot be empty',

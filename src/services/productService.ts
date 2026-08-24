@@ -10,6 +10,14 @@ import { AppError } from '../types';
 const cleanProductData = (data: any): any => {
   const cleaned = { ...data };
   
+  // Convert numeric fields from strings (FormData sends everything as strings)
+  const numericFields = ['price', 'cost', 'stock', 'minStock', 'maxStock'];
+  numericFields.forEach(field => {
+    if (cleaned[field] !== undefined && cleaned[field] !== null && cleaned[field] !== '') {
+      cleaned[field] = Number(cleaned[field]);
+    }
+  });
+
   // Convert empty strings to null for optional fields
   const optionalFields = ['description', 'brand', 'location', 'barcode', 'imageUrl', 'expiryDate', 'maxStock'];
   
@@ -26,12 +34,17 @@ const cleanProductData = (data: any): any => {
       cleaned.expiryDate = null;
     }
   }
+
+  // Ensure currency is valid
+  if (cleaned.currency && !['USD', 'VES'].includes(cleaned.currency)) {
+    cleaned.currency = 'VES';
+  }
   
   return cleaned;
 };
 
 /**
- * Generate a unique SKU automatically
+ * Generate a unique SKU automatically per user
  * Format: PRD-XXXXXX (6 alphanumeric chars from timestamp + random)
  */
 const generateSKU = (): string => {
@@ -42,8 +55,8 @@ const generateSKU = (): string => {
 };
 
 /**
- * Create a new product
- * @param productData - Product creation data
+ * Create a new product for a specific user
+ * @param productData - Product creation data (must include userId)
  * @returns Created product
  */
 export const createProduct = async (
@@ -56,33 +69,45 @@ export const createProduct = async (
     // Auto-generate SKU if not provided
     if (!cleanedData.sku) {
       let sku = generateSKU();
-      // Ensure uniqueness (retry up to 5 times)
+      // Ensure uniqueness within user (retry up to 5 times)
       for (let i = 0; i < 5; i++) {
-        const existing = await Product.findOne({ where: { sku } });
+        const existing = await Product.findOne({ where: { sku, userId: cleanedData.userId } });
         if (!existing) break;
         sku = generateSKU();
       }
       cleanedData.sku = sku;
     }
 
-    // Verify category exists
-    const category = await Category.findByPk(cleanedData.categoryId);
+    // Verify category exists AND belongs to the same user
+    const category = await Category.findOne({
+      where: { id: cleanedData.categoryId, userId: cleanedData.userId },
+    });
     if (!category) {
-      throw new AppError('Category not found', 404);
+      throw new AppError('Category not found or does not belong to your inventory', 404);
     }
 
     const product = await Product.create(cleanedData);
+
+    // Send real-time notification
+    try {
+      const { notifyProductCreated } = await import('./notificationService');
+      notifyProductCreated(cleanedData.userId, cleanedData.name);
+    } catch {
+      // Notification failure shouldn't break product creation
+    }
+
     return product.toJSON();
   } catch (error: any) {
     if (error.name === 'SequelizeUniqueConstraintError') {
-      throw new AppError('Ya existe un producto con ese nombre o código', 409);
+      throw new AppError('Ya existe un producto con ese código en tu inventario', 409);
     }
     throw error;
   }
 };
 
 /**
- * Get all products with pagination and search
+ * Get all products for a specific user with pagination and search
+ * @param userId - User ID for isolation
  * @param page - Page number (default: 1)
  * @param limit - Items per page (default: 10)
  * @param search - Search term for name or SKU
@@ -90,25 +115,32 @@ export const createProduct = async (
  * @returns Paginated products with category information
  */
 export const getAllProducts = async (
+  userId: string,
   page: number = 1,
   limit: number = 10,
   search?: string,
-  categoryId?: string
+  categoryId?: string,
+  isActive?: string
 ): Promise<PaginatedResponse<ProductAttributes>> => {
   const offset = (page - 1) * limit;
 
-  // Build where clause
-  const where: any = {};
+  // Build where clause - always filter by userId
+  const where: any = { userId };
 
   if (search) {
     where[Op.or] = [
       { name: { [Op.like]: `%${search}%` } },
       { sku: { [Op.like]: `%${search}%` } },
+      { brand: { [Op.like]: `%${search}%` } },
     ];
   }
 
   if (categoryId) {
     where.categoryId = categoryId;
+  }
+
+  if (isActive !== undefined) {
+    where.isActive = isActive === 'true';
   }
 
   const { count, rows } = await Product.findAndCountAll({
@@ -147,12 +179,17 @@ export const getAllProducts = async (
 };
 
 /**
- * Get product by ID
+ * Get product by ID for a specific user
  * @param id - Product ID
+ * @param userId - User ID for isolation
  * @returns Product with category and images relationships
  */
-export const getProductById = async (id: string): Promise<ProductAttributes> => {
-  const product = await Product.findByPk(id, {
+export const getProductById = async (id: string, userId?: string): Promise<ProductAttributes> => {
+  const where: any = { id };
+  if (userId) where.userId = userId;
+
+  const product = await Product.findOne({
+    where,
     include: [
       {
         model: Category,
@@ -180,16 +217,21 @@ export const getProductById = async (id: string): Promise<ProductAttributes> => 
 };
 
 /**
- * Update product
+ * Update product for a specific user
  * @param id - Product ID
+ * @param userId - User ID for isolation
  * @param updateData - Data to update
  * @returns Updated product
  */
 export const updateProduct = async (
   id: string,
-  updateData: Partial<ProductCreationAttributes>
+  updateData: Partial<ProductCreationAttributes>,
+  userId?: string
 ): Promise<ProductAttributes> => {
-  const product = await Product.findByPk(id);
+  const where: any = { id };
+  if (userId) where.userId = userId;
+
+  const product = await Product.findOne({ where });
 
   if (!product) {
     throw new AppError('Product not found', 404);
@@ -198,11 +240,13 @@ export const updateProduct = async (
   // Clean the data
   const cleanedData = cleanProductData(updateData);
 
-  // If updating categoryId, verify category exists
-  if (cleanedData.categoryId) {
-    const category = await Category.findByPk(cleanedData.categoryId);
+  // If updating categoryId, verify category exists and belongs to user
+  if (cleanedData.categoryId && userId) {
+    const category = await Category.findOne({
+      where: { id: cleanedData.categoryId, userId },
+    });
     if (!category) {
-      throw new AppError('Category not found', 404);
+      throw new AppError('Category not found or does not belong to your inventory', 404);
     }
   }
 
@@ -233,18 +277,22 @@ export const updateProduct = async (
     return product.toJSON();
   } catch (error: any) {
     if (error.name === 'SequelizeUniqueConstraintError') {
-      throw new AppError('SKU already exists', 409);
+      throw new AppError('SKU already exists in your inventory', 409);
     }
     throw error;
   }
 };
 
 /**
- * Delete product
+ * Delete product for a specific user
  * @param id - Product ID
+ * @param userId - User ID for isolation
  */
-export const deleteProduct = async (id: string): Promise<void> => {
-  const product = await Product.findByPk(id);
+export const deleteProduct = async (id: string, userId?: string): Promise<void> => {
+  const where: any = { id };
+  if (userId) where.userId = userId;
+
+  const product = await Product.findOne({ where });
 
   if (!product) {
     throw new AppError('Product not found', 404);
@@ -254,16 +302,19 @@ export const deleteProduct = async (id: string): Promise<void> => {
 };
 
 /**
- * Search products by name or SKU (case-insensitive)
+ * Search products by name or SKU for a specific user
  * @param searchTerm - Search term
+ * @param userId - User ID for isolation
  * @returns Array of matching products with images
  */
-export const searchProducts = async (searchTerm: string): Promise<ProductAttributes[]> => {
+export const searchProducts = async (searchTerm: string, userId: string): Promise<ProductAttributes[]> => {
   const products = await Product.findAll({
     where: {
+      userId,
       [Op.or]: [
         { name: { [Op.like]: `%${searchTerm}%` } },
         { sku: { [Op.like]: `%${searchTerm}%` } },
+        { brand: { [Op.like]: `%${searchTerm}%` } },
       ],
     },
     include: [
@@ -285,6 +336,83 @@ export const searchProducts = async (searchTerm: string): Promise<ProductAttribu
       [{ model: ProductImage, as: 'images' }, 'isPrimary', 'DESC'],
       [{ model: ProductImage, as: 'images' }, 'displayOrder', 'ASC'],
     ],
+  });
+
+  return products.map(product => product.toJSON());
+};
+
+/**
+ * Get product by barcode for a specific user
+ * @param barcode - Barcode to search for
+ * @param userId - User ID for isolation
+ * @returns Product with the matching barcode or null
+ */
+export const getProductByBarcode = async (barcode: string, userId: string): Promise<ProductAttributes | null> => {
+  const normalizedBarcode = barcode.replace(/[\s\-]/g, '').toUpperCase();
+  
+  const product = await Product.findOne({
+    where: {
+      userId,
+      barcode: normalizedBarcode,
+    },
+    include: [
+      {
+        model: Category,
+        as: 'category',
+        attributes: ['id', 'name'],
+      },
+      {
+        model: ProductImage,
+        as: 'images',
+        attributes: ['id', 'imageUrl', 'fileName', 'fileSize', 'mimeType', 'isPrimary', 'displayOrder'],
+        required: false,
+      },
+    ],
+  });
+
+  return product ? product.toJSON() : null;
+};
+
+/**
+ * Get low stock products for a specific user
+ * @param userId - User ID for isolation
+ * @param limit - Max products to return
+ * @returns Products with stock below minStock
+ */
+export const getLowStockProducts = async (userId: string, limit: number = 20): Promise<ProductAttributes[]> => {
+  const products = await Product.findAll({
+    where: {
+      userId,
+      isActive: true,
+      [Op.and]: [
+        { stock: { [Op.lte]: { [Op.col]: 'minStock' } } },
+      ],
+    },
+    include: [
+      {
+        model: Category,
+        as: 'category',
+        attributes: ['id', 'name'],
+      },
+    ],
+    order: [['stock', 'ASC']],
+    limit,
+  });
+
+  return products.map(product => product.toJSON());
+};
+
+/**
+ * Get top products by stock for a specific user
+ * @param userId - User ID for isolation
+ * @param limit - Max products to return
+ * @returns Top products
+ */
+export const getTopProducts = async (userId: string, limit: number = 5): Promise<ProductAttributes[]> => {
+  const products = await Product.findAll({
+    where: { userId, isActive: true },
+    order: [['stock', 'DESC']],
+    limit,
   });
 
   return products.map(product => product.toJSON());

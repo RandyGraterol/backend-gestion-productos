@@ -1,179 +1,159 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
+import { AuthRequest } from '../types';
 import * as dashboardService from '../services/dashboardService';
+import { resolveTenantIdWithBypass } from '../utils/tenant';
 
 /**
  * Dashboard Controller
- * Handles all dashboard-related requests
+ * Handles all dashboard-related requests — all filtered by userId
  */
 
 /**
  * Get general dashboard statistics
  * GET /api/dashboard/stats
  */
-export const getStatsHandler = async (req: Request, res: Response) => {
+export const getStatsHandler = async (req: AuthRequest, res: Response) => {
   try {
-    const { from, to } = req.query;
-    
-    let dateRange;
-    if (from && to) {
-      dateRange = {
-        from: new Date(from as string),
-        to: new Date(to as string),
-      };
+    const userId = resolveTenantIdWithBypass(req.user!, req.query.tenantId as string | undefined);
+    if (!userId) {
+      res.status(401).json({ success: false, error: 'User authentication required' });
+      return;
     }
 
-    const stats = await dashboardService.getDashboardStats(dateRange);
+    const { from, to } = req.query;
+    let dateRange;
+    if (from && to) {
+      dateRange = { from: new Date(from as string), to: new Date(to as string) };
+    }
 
-    res.json({
-      success: true,
-      data: stats,
-    });
+    const stats = await dashboardService.getDashboardStats(userId, dateRange);
+    res.json({ success: true, data: stats });
   } catch (error) {
     console.error('Error getting dashboard stats:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error al obtener estadísticas del dashboard',
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
+    res.status(500).json({ success: false, message: 'Error al obtener estadísticas' });
   }
 };
 
 /**
  * Get category statistics
- * GET /api/dashboard/categories
+ * GET /api/dashboard/stats-by-category
  */
-export const getCategoryStatsHandler = async (_req: Request, res: Response) => {
+export const getCategoryStatsHandler = async (req: AuthRequest, res: Response) => {
   try {
-    const stats = await dashboardService.getCategoryStats();
+    const userId = resolveTenantIdWithBypass(req.user!, req.query.tenantId as string | undefined);
+    if (!userId) {
+      res.status(401).json({ success: false, error: 'User authentication required' });
+      return;
+    }
 
-    res.json({
-      success: true,
-      data: stats,
-    });
+    const stats = await dashboardService.getCategoryStats(userId);
+    res.json({ success: true, data: stats });
   } catch (error) {
     console.error('Error getting category stats:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error al obtener estadísticas de categorías',
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
+    res.status(500).json({ success: false, message: 'Error al obtener estadísticas de categorías' });
   }
 };
 
 /**
  * Get stock movement statistics
- * GET /api/dashboard/movements?days=7
+ * GET /api/dashboard/movements-by-day
  */
-export const getMovementStatsHandler = async (req: Request, res: Response) => {
+export const getMovementStatsHandler = async (req: AuthRequest, res: Response) => {
   try {
+    const userId = resolveTenantIdWithBypass(req.user!, req.query.tenantId as string | undefined);
+    if (!userId) {
+      res.status(401).json({ success: false, error: 'User authentication required' });
+      return;
+    }
+
     const days = parseInt(req.query.days as string) || 7;
-
-    const stats = await dashboardService.getMovementStats(days);
-
-    res.json({
-      success: true,
-      data: stats,
-    });
+    const stats = await dashboardService.getMovementStats(userId, days);
+    res.json({ success: true, data: stats });
   } catch (error) {
     console.error('Error getting movement stats:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error al obtener estadísticas de movimientos',
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
+    res.status(500).json({ success: false, message: 'Error al obtener estadísticas de movimientos' });
   }
 };
 
 /**
  * Get products with low stock
- * GET /api/dashboard/low-stock?limit=10
+ * GET /api/dashboard/low-stock
  */
-export const getLowStockHandler = async (req: Request, res: Response) => {
+export const getLowStockHandler = async (req: AuthRequest, res: Response) => {
   try {
+    const userId = resolveTenantIdWithBypass(req.user!, req.query.tenantId as string | undefined);
+    if (!userId) {
+      res.status(401).json({ success: false, error: 'User authentication required' });
+      return;
+    }
+
     const limit = parseInt(req.query.limit as string) || 10;
-
-    const products = await dashboardService.getLowStockProducts(limit);
-
-    res.json({
-      success: true,
-      data: products,
-    });
+    const products = await dashboardService.getLowStockProducts(userId, limit);
+    res.json({ success: true, data: products });
   } catch (error) {
     console.error('Error getting low stock products:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error al obtener productos con stock bajo',
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
+    res.status(500).json({ success: false, message: 'Error al obtener productos con stock bajo' });
   }
 };
 
 /**
- * Get price distribution by category
+ * Get top products
+ * GET /api/dashboard/top-products
+ */
+export const getTopProductsHandler = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = resolveTenantIdWithBypass(req.user!, req.query.tenantId as string | undefined);
+    if (!userId) {
+      res.status(401).json({ success: false, error: 'User authentication required' });
+      return;
+    }
+
+    const limit = parseInt(req.query.limit as string) || 5;
+    const products = await dashboardService.getTopProducts(userId, limit);
+    res.json({ success: true, data: products });
+  } catch (error) {
+    console.error('Error getting top products:', error);
+    res.status(500).json({ success: false, message: 'Error al obtener top productos' });
+  }
+};
+
+/**
+ * Get price distribution
  * GET /api/dashboard/price-distribution
  */
-export const getPriceDistributionHandler = async (_req: Request, res: Response) => {
+export const getPriceDistributionHandler = async (req: AuthRequest, res: Response) => {
   try {
-    const distribution = await dashboardService.getPriceDistribution();
+    const userId = resolveTenantIdWithBypass(req.user!, req.query.tenantId as string | undefined);
+    if (!userId) {
+      res.status(401).json({ success: false, error: 'User authentication required' });
+      return;
+    }
 
-    res.json({
-      success: true,
-      data: distribution,
-    });
+    const distribution = await dashboardService.getPriceDistribution(userId);
+    res.json({ success: true, data: distribution });
   } catch (error) {
     console.error('Error getting price distribution:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error al obtener distribución de precios',
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
-  }
-};
-
-/**
- * Get top selling products
- * GET /api/dashboard/top-products?limit=5
- */
-export const getTopSellingHandler = async (req: Request, res: Response) => {
-  try {
-    const limit = parseInt(req.query.limit as string) || 5;
-
-    const products = await dashboardService.getTopSellingProducts(limit);
-
-    res.json({
-      success: true,
-      data: products,
-    });
-  } catch (error) {
-    console.error('Error getting top selling products:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error al obtener productos más vendidos',
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
+    res.status(500).json({ success: false, message: 'Error al obtener distribución de precios' });
   }
 };
 
 /**
  * Get profit stats
- * GET /api/dashboard/profits?days=7
+ * GET /api/dashboard/profits
  */
-export const getProfitsHandler = async (req: Request, res: Response) => {
+export const getProfitsHandler = async (req: AuthRequest, res: Response) => {
   try {
+    const userId = resolveTenantIdWithBypass(req.user!, req.query.tenantId as string | undefined);
+    if (!userId) {
+      res.status(401).json({ success: false, error: 'User authentication required' });
+      return;
+    }
+
     const days = parseInt(req.query.days as string) || 7;
-
-    const stats = await dashboardService.getProfitStats(days);
-
-    res.json({
-      success: true,
-      data: stats,
-    });
+    const stats = await dashboardService.getProfitStats(userId, days);
+    res.json({ success: true, data: stats });
   } catch (error) {
     console.error('Error getting profit stats:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error al obtener reporte de ganancias',
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
+    res.status(500).json({ success: false, message: 'Error al obtener reporte de ganancias' });
   }
 };

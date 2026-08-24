@@ -3,8 +3,7 @@ import { fetchExchangeRates } from '../services/exchangeRateService';
 
 /**
  * GET /api/exchange-rate
- * Returns the current BCV exchange rate (VES per USD).
- * Rate is updated daily at midnight and rounded to 2 decimal places.
+ * Returns official, parallel, and EUR exchange rates.
  */
 export const getExchangeRate = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -14,11 +13,15 @@ export const getExchangeRate = async (req: Request, res: Response): Promise<void
     res.json({
       success: true,
       data: {
-        bcv: rates.bcv,
+        bcv: rates.official,
+        official: rates.official,
+        parallel: rates.parallel,
+        eur: rates.eur,
+        usdToEur: rates.usdToEur,
         updatedAt: rates.updatedAt,
         fetchedDate: rates.fetchedDate,
         source: 've.dolarapi.com',
-        currency: 'VES', // Venezuelan Bolívares
+        currency: 'VES',
         base: 'USD',
       },
     });
@@ -26,7 +29,7 @@ export const getExchangeRate = async (req: Request, res: Response): Promise<void
     console.error('Error in getExchangeRate controller:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to fetch exchange rates. Please try again later.',
+      error: 'Failed to fetch exchange rates.',
     });
   }
 };

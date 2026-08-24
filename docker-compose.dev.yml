@@ -1,0 +1,143 @@
+# ============================================
+# InventarioApp - Docker Compose (DESARROLLO)
+# Hot reload + ts-node + todos los scripts
+# ============================================
+
+services:
+  # ============================================
+  # PostgreSQL Database
+  # ============================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: inventario-postgres
+    restart: unless-stopped
+    ports:
+      - "5435:5432"
+    environment:
+      POSTGRES_DB: inventario_db
+      POSTGRES_USER: inventario_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-inventario_secure_2026}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql/data
+    networks:
+      - inventario-network-dev
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U inventario_user -d inventario_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ============================================
+  # Redis Cache
+  # ============================================
+  redis:
+    image: redis:7-alpine
+    container_name: inventario-redis
+    restart: unless-stopped
+    ports:
+      - "6383:6379"
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data_dev:/data
+    networks:
+      - inventario-network-dev
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================
+  # Backend API (DESARROLLO - hot reload)
+  # ============================================
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: inventario-backend
+    restart: unless-stopped
+    ports:
+      - "3010:3010"
+    environment:
+      # Server
+      NODE_ENV: development
+      PORT: 3010
+      HOST: 0.0.0.0
+
+      # PostgreSQL
+      DB_DIALECT: postgres
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: inventario_db
+      DB_USER: inventario_user
+      DB_PASSWORD: ${DB_PASSWORD:-inventario_secure_2026}
+
+      # Redis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_ENABLED: true
+
+      # JWT
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      JWT_EXPIRES_IN: 1h
+      JWT_REFRESH_EXPIRES_IN: 30d
+
+      # CORS
+      CORS_ORIGIN: http://localhost:8080,http://localhost:19006,http://192.168.1.6:*
+
+      # Security
+      RATE_LIMIT_ENABLED: "true"
+      RATE_LIMIT_MAX: 100
+      RATE_LIMIT_WINDOW: 15
+      HELMET_ENABLED: "true"
+
+      # Upload
+      UPLOAD_DIR: ./uploads
+      MAX_FILE_SIZE: 5242880
+
+      # Logging
+      LOG_LEVEL: debug
+      DB_LOGGING: "true"
+
+      # Database sync (desarrollo: true para crear tablas automáticas)
+      DB_SYNC: "true"
+      DB_FORCE_SYNC: "false"
+
+      # Email - códigos de un solo uso para descargas
+      # Configura estas variables en un archivo .env junto a este docker-compose
+      # (EMAIL_USER y EMAIL_PASSWORD con tu correo y contraseña de aplicación)
+      EMAIL_ENABLED: ${EMAIL_ENABLED:-false}
+      EMAIL_HOST: ${EMAIL_HOST:-smtp.gmail.com}
+      EMAIL_PORT: ${EMAIL_PORT:-587}
+      EMAIL_SECURE: ${EMAIL_SECURE:-false}
+      EMAIL_USER: ${EMAIL_USER:-}
+      EMAIL_PASSWORD: ${EMAIL_PASSWORD:-}
+      EMAIL_FROM: ${EMAIL_FROM:-Inventario Santiago <noreply@inventariosantiago.com>}
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:-}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:-}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:-}
+    volumes:
+      # Montar código fuente para hot reload
+      - ./src:/app/src
+      - uploads_data_dev:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - inventario-network-dev
+
+volumes:
+  postgres_data_dev:
+    driver: local
+  redis_data_dev:
+    driver: local
+  uploads_data_dev:
+    driver: local
+
+networks:
+  inventario-network-dev:
+    driver: bridge

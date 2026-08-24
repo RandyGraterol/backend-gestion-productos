@@ -50,10 +50,35 @@ export const serverConfig = {
  * Configuración de la base de datos
  */
 export const databaseConfig = {
+  // PostgreSQL (producción)
+  dialect: getEnv('DB_DIALECT', 'sqlite') as 'postgres' | 'sqlite',
+  host: getEnv('DB_HOST', 'localhost'),
+  port: getEnvNumber('DB_PORT', 5432),
+  name: getEnv('DB_NAME', 'inventario_db'),
+  user: getEnv('DB_USER', 'inventario_user'),
+  password: getEnv('DB_PASSWORD', 'inventario_secure_2026'),
+  ssl: getEnvBoolean('DB_SSL', false),
+  // SQLite (desarrollo)
   path: getEnv('DB_PATH', './database/inventory.sqlite'),
+  // Common
   logging: getEnvBoolean('DB_LOGGING', true),
   sync: getEnvBoolean('DB_SYNC', true),
   forceSync: getEnvBoolean('DB_FORCE_SYNC', false),
+};
+
+/**
+ * Configuración de Redis
+ */
+export const redisConfig = {
+  enabled: getEnvBoolean('REDIS_ENABLED', false),
+  host: getEnv('REDIS_HOST', 'localhost'),
+  port: getEnvNumber('REDIS_PORT', 6379),
+  password: getEnv('REDIS_PASSWORD', ''),
+  db: getEnvNumber('REDIS_DB', 0),
+  // TTL defaults (seconds)
+  ttlStats: getEnvNumber('REDIS_TTL_STATS', 300), // 5 minutes
+  ttlDashboard: getEnvNumber('REDIS_TTL_DASHBOARD', 120), // 2 minutes
+  ttlProducts: getEnvNumber('REDIS_TTL_PRODUCTS', 60), // 1 minute
 };
 
 /**
@@ -163,6 +188,7 @@ export const backupConfig = {
 export const config = {
   server: serverConfig,
   database: databaseConfig,
+  redis: redisConfig,
   jwt: jwtConfig,
   cors: corsConfig,
   logging: loggingConfig,
@@ -181,6 +207,7 @@ export const config = {
  */
 export function validateEnv(): void {
   const errors: string[] = [];
+  const warnings: string[] = [];
 
   // Validar JWT_SECRET en producción
   if (serverConfig.isProduction && jwtConfig.secret === 'your-secret-key-change-this-in-production') {
@@ -200,6 +227,18 @@ export function validateEnv(): void {
   // Validar configuración de email si está habilitado
   if (emailConfig.enabled && (!emailConfig.user || !emailConfig.password)) {
     errors.push('EMAIL_USER and EMAIL_PASSWORD are required when EMAIL_ENABLED is true');
+  }
+
+  // Advertir cuando el envío de correos está deshabilitado (los códigos OTP se imprimirán por consola)
+  if (!emailConfig.enabled) {
+    warnings.push(
+      'EMAIL_ENABLED=false: los códigos de un solo uso para descargar la app se mostrarán en la consola del servidor en lugar de enviarse por correo'
+    );
+  }
+
+  if (warnings.length > 0) {
+    console.warn('⚠️  Environment validation warnings:');
+    warnings.forEach(warning => console.warn(`  - ${warning}`));
   }
 
   if (errors.length > 0) {
@@ -223,14 +262,25 @@ export function printConfig(): void {
   console.log('\n📋 Current Configuration:');
   console.log('  Environment:', serverConfig.nodeEnv);
   console.log('  Server:', `${serverConfig.host}:${serverConfig.port}`);
-  console.log('  Database:', databaseConfig.path);
+  if (databaseConfig.dialect === 'postgres') {
+    console.log('  Database:', `PostgreSQL @ ${databaseConfig.host}:${databaseConfig.port}/${databaseConfig.name}`);
+  } else {
+    console.log('  Database:', `SQLite @ ${databaseConfig.path}`);
+  }
+  console.log('  Redis:', redisConfig.enabled ? `Enabled @ ${redisConfig.host}:${redisConfig.port}` : 'Disabled');
   console.log('  CORS Origin:', corsConfig.origin.join(', '));
   console.log('  API Prefix:', apiConfig.prefix);
   console.log('  Upload Dir:', uploadConfig.dir);
   console.log('  Max File Size:', `${uploadConfig.maxFileSize / 1024 / 1024}MB`);
   console.log('  Rate Limiting:', securityConfig.rateLimitEnabled ? 'Enabled' : 'Disabled');
+  console.log('  Helmet:', securityConfig.helmetEnabled ? 'Enabled' : 'Disabled');
   console.log('  Notifications:', notificationConfig.enabled ? 'Enabled' : 'Disabled');
-  console.log('  Email:', emailConfig.enabled ? 'Enabled' : 'Disabled');
+  console.log(
+    '  Email:',
+    emailConfig.enabled
+      ? `Enabled @ ${emailConfig.host}:${emailConfig.port} (${emailConfig.user})`
+      : 'Disabled (códigos OTP solo por consola)'
+  );
   console.log('  Backup:', backupConfig.enabled ? 'Enabled' : 'Disabled');
   console.log('');
 }

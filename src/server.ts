@@ -1,13 +1,18 @@
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
 import path from 'path';
 import { initializeDatabase } from './models';
 import routes from './routes';
 import { errorHandler } from './middleware/errorHandler';
 import { logger } from './middleware/logger';
+import { apiLimiter } from './middleware/rateLimiter';
 import { AppError } from './types';
 import { config, validateEnv, printConfig } from './config/env';
+import { initRedis, closeRedis } from './config/redis';
 import { scheduleDailyRateUpdate } from './services/exchangeRateService';
+import { initSocket, startNotificationChecks, stopNotificationChecks } from './services/notificationService';
+import { seedDefaultCategoriesForAllUsers } from './services/categoryService';
 
 /**
  * Create Express application
@@ -47,6 +52,17 @@ app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 
 /**
+ * Helmet - Security headers
+ */
+if (config.security.helmetEnabled) {
+  app.use(helmet({
+    contentSecurityPolicy: false, // Deshabilitar CSP para permitir imágenes de uploads
+    crossOriginEmbedderPolicy: false,
+  }));
+  console.log('🔒 Helmet security headers enabled');
+}
+
+/**
  * Body parser middleware
  */
 app.use(express.json());
@@ -56,6 +72,14 @@ app.use(express.urlencoded({ extended: true }));
  * Logger middleware
  */
 app.use(logger);
+
+/**
+ * Rate limiting general para todas las rutas API
+ */
+if (config.security.rateLimitEnabled) {
+  app.use(config.api.prefix, apiLimiter);
+  console.log(`🛡️  Rate limiting enabled: ${config.security.rateLimitMax} requests per ${config.security.rateLimitWindow} minutes`);
+}
 
 /**
  * Serve static files (uploaded images)
@@ -134,15 +158,27 @@ const startServer = async () => {
     console.log('Initializing database...');
     await initializeDatabase();
 
+    // Seed default categories for users who don't have any
+    await seedDefaultCategoriesForAllUsers();
+
+    // Initialize Redis cache
+    await initRedis();
+
     // Start the daily exchange rate scheduler (fetches immediately + schedules 00:00 daily)
     scheduleDailyRateUpdate();
 
-    // Start Express server
-    app.listen(config.server.port, () => {
+    // Start HTTP server + Socket.io
+    const httpServer = app.listen(config.server.port, () => {
       console.log(`✅ Server running in ${config.server.nodeEnv} mode on port ${config.server.port}`);
       console.log(`✅ CORS enabled for origins: ${config.cors.origin.join(', ')}`);
       console.log(`✅ API available at: ${config.api.prefix}`);
     });
+
+    // Initialize Socket.io
+    initSocket(httpServer);
+
+    // Start periodic notification checks
+    startNotificationChecks();
   } catch (error) {
     console.error('❌ Failed to start server:', error);
     process.exit(1);
@@ -152,13 +188,17 @@ const startServer = async () => {
 /**
  * Graceful shutdown handlers
  */
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
   console.log('SIGTERM signal received: closing HTTP server');
+  stopNotificationChecks();
+  await closeRedis();
   process.exit(0);
 });
 
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
   console.log('SIGINT signal received: closing HTTP server');
+  stopNotificationChecks();
+  await closeRedis();
   process.exit(0);
 });
 

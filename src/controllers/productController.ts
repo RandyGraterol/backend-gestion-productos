@@ -3,6 +3,7 @@ import { AuthRequest } from '../types';
 import * as productService from '../services/productService';
 import ProductImage from '../models/ProductImage';
 import { getFileUrl, deleteUploadedFile } from '../config/multer';
+import { resolveTenantId, resolveTenantIdWithBypass } from '../utils/tenant';
 
 /**
  * Create a new product with optional images
@@ -16,47 +17,41 @@ export const createHandler = async (
   const uploadedFiles: Express.Multer.File[] = [];
   
   try {
-    console.log('=== CREATE PRODUCT REQUEST ===');
-    console.log('Request body:', JSON.stringify(req.body, null, 2));
-    console.log('User:', req.user);
-    console.log('Files:', req.files);
-    
+    const userId = resolveTenantId(req.user!);
+    if (!userId) {
+      res.status(401).json({ success: false, error: 'User authentication required' });
+      return;
+    }
+
     // Extract files if present
     const files = req.files as Express.Multer.File[] | undefined;
     if (files) {
       uploadedFiles.push(...files);
     }
     
-    // Create product first
-    const product = await productService.createProduct(req.body);
-    console.log('Product created successfully:', product.id);
+    // Add userId to product data
+    const productData = { ...req.body, userId };
+    const product = await productService.createProduct(productData);
     
     // Process images if any were uploaded
     if (uploadedFiles.length > 0) {
-      console.log(`Processing ${uploadedFiles.length} image(s)...`);
-      
       try {
-        // Create image records
         const imageRecords = await Promise.all(
           uploadedFiles.map(async (file, index) => {
             const imageUrl = getFileUrl(req, file.filename);
-            
             return await ProductImage.create({
               productId: product.id,
               imageUrl,
               fileName: file.filename,
               fileSize: file.size,
               mimeType: file.mimetype,
-              isPrimary: index === 0, // First image is primary
+              isPrimary: index === 0,
               displayOrder: index,
             });
           })
         );
         
-        console.log(`${imageRecords.length} image(s) saved successfully`);
-        
-        // Reload product with images
-        const productWithImages = await productService.getProductById(product.id);
+        const productWithImages = await productService.getProductById(product.id, userId);
         
         res.status(201).json({
           success: true,
@@ -64,20 +59,12 @@ export const createHandler = async (
           message: `Product created successfully with ${imageRecords.length} image(s)`,
         });
       } catch (imageError) {
-        console.error('Error saving images, rolling back product:', imageError);
-        
         // Rollback: delete the product
-        await productService.deleteProduct(product.id);
-        
-        // Clean up uploaded files
-        uploadedFiles.forEach((file) => {
-          deleteUploadedFile(file.path);
-        });
-        
+        await productService.deleteProduct(product.id, userId);
+        uploadedFiles.forEach((file) => deleteUploadedFile(file.path));
         throw imageError;
       }
     } else {
-      // No images, return product as is
       res.status(201).json({
         success: true,
         data: product,
@@ -85,13 +72,7 @@ export const createHandler = async (
       });
     }
   } catch (error) {
-    console.error('Error in createHandler:', error);
-    
-    // Clean up any uploaded files on error
-    uploadedFiles.forEach((file) => {
-      deleteUploadedFile(file.path);
-    });
-    
+    uploadedFiles.forEach((file) => deleteUploadedFile(file.path));
     next(error);
   }
 };
@@ -106,12 +87,19 @@ export const getAllHandler = async (
   next: NextFunction
 ): Promise<void> => {
   try {
+    const userId = resolveTenantIdWithBypass(req.user!, req.query.tenantId as string | undefined);
+    if (!userId) {
+      res.status(401).json({ success: false, error: 'User authentication required' });
+      return;
+    }
+
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
     const search = req.query.search as string;
     const categoryId = req.query.categoryId as string;
+    const isActive = req.query.isActive as string;
 
-    const result = await productService.getAllProducts(page, limit, search, categoryId);
+    const result = await productService.getAllProducts(userId, page, limit, search, categoryId, isActive);
 
     res.status(200).json({
       success: true,
@@ -133,7 +121,8 @@ export const getByIdHandler = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const product = await productService.getProductById(req.params.id);
+    const userId = resolveTenantId(req.user!);
+    const product = await productService.getProductById(req.params.id, userId);
 
     res.status(200).json({
       success: true,
@@ -156,72 +145,56 @@ export const updateHandler = async (
   const uploadedFiles: Express.Multer.File[] = [];
   
   try {
-    console.log('=== UPDATE PRODUCT REQUEST ===');
-    console.log('Product ID:', req.params.id);
-    console.log('Request body:', JSON.stringify(req.body, null, 2));
-    console.log('Files:', req.files);
-    
+    const userId = resolveTenantId(req.user!);
+    if (!userId) {
+      res.status(401).json({ success: false, error: 'User authentication required' });
+      return;
+    }
+
     // Extract files if present
     const files = req.files as Express.Multer.File[] | undefined;
     if (files) {
       uploadedFiles.push(...files);
     }
     
-    // Update product data first
-    const product = await productService.updateProduct(req.params.id, req.body);
-    console.log('Product updated successfully:', product.id);
+    // Update product data
+    await productService.updateProduct(req.params.id, req.body, userId);
     
     // Process new images if any were uploaded
     if (uploadedFiles.length > 0) {
-      console.log(`Processing ${uploadedFiles.length} new image(s)...`);
-      
       try {
-        // Get current images to determine next displayOrder
         const currentImages = await ProductImage.findAll({
           where: { productId: req.params.id },
           order: [['displayOrder', 'DESC']],
         });
         
         const nextDisplayOrder = currentImages.length > 0 
-          ? currentImages[0].displayOrder + 1 
+          ? currentImages[0].displayOrder + 1
           : 0;
         
-        // Check if product has any primary image
         const hasPrimaryImage = currentImages.some(img => img.isPrimary);
         
-        // Create new image records
-        const imageRecords = await Promise.all(
+        await Promise.all(
           uploadedFiles.map(async (file, index) => {
             const imageUrl = getFileUrl(req, file.filename);
-            
             return await ProductImage.create({
               productId: req.params.id,
               imageUrl,
               fileName: file.filename,
               fileSize: file.size,
               mimeType: file.mimetype,
-              isPrimary: !hasPrimaryImage && index === 0, // First new image is primary if no primary exists
+              isPrimary: !hasPrimaryImage && index === 0,
               displayOrder: nextDisplayOrder + index,
             });
           })
         );
-        
-        console.log(`${imageRecords.length} image(s) saved successfully`);
       } catch (imageError) {
-        console.error('Error saving images:', imageError);
-        
-        // Clean up uploaded files
-        uploadedFiles.forEach((file) => {
-          deleteUploadedFile(file.path);
-        });
-        
-        // Don't fail the update, just log the error
+        uploadedFiles.forEach((file) => deleteUploadedFile(file.path));
         console.error('Images could not be saved, but product was updated');
       }
     }
     
-    // Reload product with images
-    const productWithImages = await productService.getProductById(req.params.id);
+    const productWithImages = await productService.getProductById(req.params.id, userId);
     
     res.status(200).json({
       success: true,
@@ -231,13 +204,7 @@ export const updateHandler = async (
         : 'Product updated successfully',
     });
   } catch (error) {
-    console.error('Error in updateHandler:', error);
-    
-    // Clean up any uploaded files on error
-    uploadedFiles.forEach((file) => {
-      deleteUploadedFile(file.path);
-    });
-    
+    uploadedFiles.forEach((file) => deleteUploadedFile(file.path));
     next(error);
   }
 };
@@ -252,7 +219,8 @@ export const deleteHandler = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    await productService.deleteProduct(req.params.id);
+    const userId = resolveTenantId(req.user!);
+    await productService.deleteProduct(req.params.id, userId);
 
     res.status(204).send();
   } catch (error) {
@@ -270,6 +238,12 @@ export const searchHandler = async (
   next: NextFunction
 ): Promise<void> => {
   try {
+    const userId = resolveTenantIdWithBypass(req.user!, req.query.tenantId as string | undefined);
+    if (!userId) {
+      res.status(401).json({ success: false, error: 'User authentication required' });
+      return;
+    }
+
     const searchTerm = req.query.q as string;
 
     if (!searchTerm) {
@@ -280,11 +254,56 @@ export const searchHandler = async (
       return;
     }
 
-    const products = await productService.searchProducts(searchTerm);
+    const products = await productService.searchProducts(searchTerm, userId);
 
     res.status(200).json({
       success: true,
       data: products,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get product by barcode
+ * GET /api/products/by-barcode
+ */
+export const getByBarcodeHandler = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const userId = resolveTenantIdWithBypass(req.user!, req.query.tenantId as string | undefined);
+    if (!userId) {
+      res.status(401).json({ success: false, error: 'User authentication required' });
+      return;
+    }
+
+    const barcode = req.query.barcode as string;
+    
+    if (!barcode) {
+      res.status(400).json({
+        success: false,
+        error: 'Barcode is required',
+      });
+      return;
+    }
+
+    const product = await productService.getProductByBarcode(barcode, userId);
+
+    if (!product) {
+      res.status(404).json({
+        success: false,
+        error: 'Product not found with the specified barcode',
+      });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      data: product,
     });
   } catch (error) {
     next(error);

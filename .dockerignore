@@ -1,0 +1,68 @@
+# ============================================
+# InventarioApp Backend - Docker Ignore
+# ============================================
+
+# Dependencies
+node_modules
+npm-debug.log*
+
+# Build output
+dist
+build
+
+# Environment files (secrets)
+.env
+.env.local
+.env.development
+.env.production
+
+# Database
+database/*.sqlite
+
+# Uploads (will be mounted as volume)
+uploads/*
+!uploads/.gitkeep
+
+# Backups
+backups/*
+
+# Logs
+logs/*
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git
+.gitignore
+
+# Documentation
+*.md
+LICENSE
+
+# Tests
+__tests__
+*.test.ts
+*.test.js
+*.spec.ts
+*.spec.js
+coverage
+
+# Scripts (not needed in production)
+scripts/
+src/scripts/
+
+# Other config
+nodemon.json
+
+# Docker files (avoid recursive builds)
+Dockerfile
+docker-compose.yml
+docker-compose*.yml

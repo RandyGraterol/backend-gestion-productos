@@ -15,6 +15,7 @@ class Product
   implements ProductAttributes
 {
   public id!: string;
+  public userId!: string;
   public sku!: string;
   public name!: string;
   public description?: string;
@@ -23,6 +24,7 @@ class Product
   public unit!: string;
   public price!: number;
   public cost!: number;
+  public currency!: 'USD' | 'VES';
   public stock!: number;
   public minStock!: number;
   public maxStock?: number;
@@ -42,10 +44,20 @@ Product.init(
       defaultValue: DataTypes.UUIDV4,
       primaryKey: true,
     },
+    userId: {
+      type: DataTypes.UUID,
+      allowNull: false,
+      references: {
+        model: 'users',
+        key: 'id',
+      },
+      onDelete: 'CASCADE',
+      onUpdate: 'CASCADE',
+    },
     sku: {
       type: DataTypes.STRING(50),
       allowNull: false,
-      unique: true,
+      unique: false,
       validate: {
         notEmpty: {
           msg: 'SKU cannot be empty',
@@ -126,6 +138,17 @@ Product.init(
       get() {
         const value = this.getDataValue('cost');
         return value ? parseFloat(value.toString()) : 0;
+      },
+    },
+    currency: {
+      type: DataTypes.STRING(3),
+      allowNull: false,
+      defaultValue: 'VES',
+      validate: {
+        isIn: {
+          args: [['USD', 'VES']],
+          msg: 'Currency must be USD or VES',
+        },
       },
     },
     stock: {

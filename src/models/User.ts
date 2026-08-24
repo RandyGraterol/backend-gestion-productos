@@ -5,7 +5,10 @@ import { hashPassword, comparePassword } from '../utils/password';
 
 // Define creation attributes (fields that are optional during creation)
 interface UserCreationAttributes
-  extends Optional<UserAttributes, 'id' | 'isActive' | 'createdAt' | 'updatedAt'> {}
+  extends Optional<
+    UserAttributes,
+    'id' | 'ownerId' | 'phone' | 'businessType' | 'emailVerified' | 'avatar' | 'isActive' | 'createdAt' | 'updatedAt'
+  > {}
 
 /**
  * User Model
@@ -16,9 +19,17 @@ class User extends Model<UserAttributes, UserCreationAttributes> implements User
   public email!: string;
   public password!: string;
   public name!: string;
-  public role!: 'admin' | 'manager' | 'employee' | 'viewer';
+  public role!: 'admin' | 'client' | 'operator';
+  public ownerId?: string | null;
+  public phone?: string | null;
+  public businessType?: 'bodega' | 'licoreria' | 'abasto' | 'supermercado' | 'farmacia' | 'otro' | null;
+  public emailVerified!: boolean;
   public avatar?: string;
   public isActive!: boolean;
+  public plan?: 'mensual' | 'anual' | 'lifetime' | null;
+  public planStatus?: 'activo' | 'pendiente' | 'expirado' | null;
+  public planExpiry?: Date | null;
+  public trialStartDate?: Date | null;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 
@@ -79,15 +90,39 @@ User.init(
       },
     },
     role: {
-      type: DataTypes.ENUM('admin', 'manager', 'employee', 'viewer'),
+      type: DataTypes.ENUM('admin', 'client', 'operator'),
       allowNull: false,
-      defaultValue: 'viewer',
+      defaultValue: 'client',
       validate: {
         isIn: {
-          args: [['admin', 'manager', 'employee', 'viewer']],
-          msg: 'Role must be one of: admin, manager, employee, viewer',
+          args: [['admin', 'client', 'operator']],
+          msg: 'Role must be one of: admin, client, operator',
         },
       },
+    },
+    ownerId: {
+      // Cliente dueño del inventario (solo para operators)
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: {
+        model: 'users',
+        key: 'id',
+      },
+      onDelete: 'CASCADE',
+      onUpdate: 'CASCADE',
+    },
+    phone: {
+      type: DataTypes.STRING(30),
+      allowNull: true,
+    },
+    businessType: {
+      type: DataTypes.ENUM('bodega', 'licoreria', 'abasto', 'supermercado', 'farmacia', 'otro'),
+      allowNull: true,
+    },
+    emailVerified: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
     },
     avatar: {
       type: DataTypes.STRING(500),
@@ -97,6 +132,26 @@ User.init(
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: true,
+    },
+    plan: {
+      type: DataTypes.ENUM('mensual', 'anual', 'lifetime'),
+      allowNull: true,
+      defaultValue: null,
+    },
+    planStatus: {
+      type: DataTypes.ENUM('activo', 'pendiente', 'expirado'),
+      allowNull: true,
+      defaultValue: null,
+    },
+    planExpiry: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      defaultValue: null,
+    },
+    trialStartDate: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      defaultValue: null,
     },
     createdAt: {
       type: DataTypes.DATE,

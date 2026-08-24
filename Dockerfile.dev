@@ -1,0 +1,31 @@
+# ============================================
+# InventarioApp Backend - Dockerfile (DESARROLLO)
+# ts-node + nodemon + hot reload
+# ============================================
+
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Install dumb-init for proper signal handling
+RUN apk add --no-cache dumb-init
+
+# Copy package files and install ALL dependencies
+COPY package*.json ./
+RUN npm ci
+
+# Copy source code
+COPY tsconfig.json ./
+COPY src/ ./src/
+
+# Create necessary directories
+RUN mkdir -p uploads backups logs database
+
+# Expose port
+EXPOSE 3010
+
+# Entrypoint
+ENTRYPOINT ["dumb-init", "--"]
+
+# Start with nodemon for hot reload
+CMD ["npx", "nodemon", "--exec", "ts-node", "src/server.ts"]

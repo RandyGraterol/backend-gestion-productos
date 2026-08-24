@@ -62,7 +62,7 @@ export const createStockMovement = async (
 
     // Capture current BCV exchange rate for accounting traceability
     const cached = getCachedRates();
-    const exchangeRate = cached?.bcv ?? undefined;
+    const exchangeRate = cached?.official ?? undefined;
 
     // Create stock movement record
     const movement = await StockMovement.create(
@@ -97,6 +97,14 @@ export const createStockMovement = async (
       ],
     });
 
+    // Send real-time notification
+    try {
+      const { notifyMovementSummary } = await import('./notificationService');
+      await notifyMovementSummary(movementData.userId);
+    } catch {
+      // Notification failure shouldn't break the movement
+    }
+
     return movement.toJSON();
   } catch (error) {
     // Rollback transaction on any error
@@ -116,18 +124,22 @@ export const getStockMovements = async (filters?: {
   type?: MovementType;
   dateFrom?: Date;
   dateTo?: Date;
+  page?: number;
   limit?: number;
-  offset?: number;
-}): Promise<StockMovementAttributes[]> => {
+}): Promise<{ data: StockMovementAttributes[]; pagination: { page: number; limit: number; total: number; totalPages: number } }> => {
   const where: any = {};
+  const page = filters?.page || 1;
+  const limit = filters?.limit || 20;
+  const offset = (page - 1) * limit;
 
-  // Apply filters
-  if (filters?.productId) {
-    where.productId = filters.productId;
-  }
-
+  // Always filter by userId for multi-tenant isolation
   if (filters?.userId) {
     where.userId = filters.userId;
+  }
+
+  // Apply other filters
+  if (filters?.productId) {
+    where.productId = filters.productId;
   }
 
   if (filters?.type) {
@@ -145,7 +157,7 @@ export const getStockMovements = async (filters?: {
     }
   }
 
-  const movements = await StockMovement.findAll({
+  const { count, rows } = await StockMovement.findAndCountAll({
     where,
     include: [
       {
@@ -160,11 +172,19 @@ export const getStockMovements = async (filters?: {
       },
     ],
     order: [['createdAt', 'DESC']],
-    limit: filters?.limit || 100,
-    offset: filters?.offset || 0,
+    limit,
+    offset,
   });
 
-  return movements.map(movement => movement.toJSON());
+  return {
+    data: rows.map(movement => movement.toJSON()),
+    pagination: {
+      page,
+      limit,
+      total: count,
+      totalPages: Math.ceil(count / limit),
+    },
+  };
 };
 
 /**
@@ -172,8 +192,9 @@ export const getStockMovements = async (filters?: {
  * @param id - Movement ID
  * @returns Stock movement with relationships
  */
-export const getStockMovementById = async (id: string): Promise<StockMovementAttributes> => {
-  const movement = await StockMovement.findByPk(id, {
+export const getStockMovementById = async (id: string, userId?: string): Promise<StockMovementAttributes> => {
+  const movement = await StockMovement.findOne({
+    where: { id, ...(userId ? { userId } : {}) },
     include: [
       {
         model: Product,
@@ -203,8 +224,19 @@ export const getStockMovementById = async (id: string): Promise<StockMovementAtt
  */
 export const getProductStockHistory = async (
   productId: string,
-  limit: number = 50
+  limit: number = 50,
+  userId?: string
 ): Promise<StockMovementAttributes[]> => {
+  // Verificar que el producto pertenezca al tenant
+  const product = await Product.findOne({
+    where: { id: productId, ...(userId ? { userId } : {}) },
+    attributes: ['id'],
+  });
+
+  if (!product) {
+    throw new AppError('Product not found', 404);
+  }
+
   const movements = await StockMovement.findAll({
     where: { productId },
     include: [

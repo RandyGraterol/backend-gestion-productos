@@ -1,9 +1,16 @@
+import fs from 'fs';
 import { Response } from 'express';
 import { AuthRequest } from '../types';
 import ProductImage from '../models/ProductImage';
 import Product from '../models/Product';
-import { getFileUrl, deleteUploadedFile } from '../config/multer';
-import path from 'path';
+import { deleteUploadedFile } from '../config/multer';
+import {
+  optimizeImage,
+  storeOptimizedImages,
+  deleteStoredImage,
+  getStorageProvider,
+  isCloudinaryConfigured,
+} from '../services/imageStorageService';
 
 /**
  * Upload images for a product
@@ -80,23 +87,38 @@ export const uploadImages = async (req: AuthRequest, res: Response): Promise<voi
     // Check if this is the first image (should be primary)
     const isFirstImage = existingImagesCount === 0;
 
-    // Create image records
+    // Create image records: optimizar con sharp y almacenar según proveedor configurado
     try {
+      const provider = await getStorageProvider();
       const imageRecords = await Promise.all(
         files.map(async (file, index) => {
-          const imageUrl = getFileUrl(req, file.filename);
-          
+          const inputBuffer = fs.readFileSync(file.path);
+          const optimized = await optimizeImage(inputBuffer);
+
+          const stored = await storeOptimizedImages(
+            optimized,
+            { productId, index, originalName: file.originalname },
+            provider === 'cloudinary' && !isCloudinaryConfigured() ? 'local' : undefined
+          );
+
           return await ProductImage.create({
             productId,
-            imageUrl,
-            fileName: file.filename,
-            fileSize: file.size,
-            mimeType: file.mimetype,
+            imageUrl: stored.imageUrl,
+            thumbnailUrl: stored.thumbnailUrl,
+            storageProvider: stored.storageProvider,
+            publicId: stored.publicId ?? null,
+            thumbnailPublicId: stored.thumbnailPublicId ?? null,
+            fileName: file.originalname,
+            fileSize: optimized.large.length,
+            mimeType: 'image/webp',
             isPrimary: isFirstImage && index === 0,
             displayOrder: existingImagesCount + index,
           });
         })
       );
+
+      // Limpiar los archivos temporales de multer (ya optimizados y reubicados)
+      files.forEach((file) => deleteUploadedFile(file.path));
 
       res.status(201).json({
         success: true,
@@ -104,16 +126,15 @@ export const uploadImages = async (req: AuthRequest, res: Response): Promise<voi
         data: imageRecords,
       });
     } catch (dbError) {
-      console.error('Database error while saving images:', dbError);
-      
-      // Clean up uploaded files on database error
+      console.error('Error processing/storing images:', dbError);
+
       files.forEach((file) => {
         deleteUploadedFile(file.path);
       });
-      
+
       res.status(500).json({
         success: false,
-        error: 'Failed to save image records to database. All uploaded files have been cleaned up.',
+        error: 'No se pudieron procesar las imágenes. Los archivos temporales fueron limpiados.',
       });
     }
   } catch (error) {
@@ -236,7 +257,6 @@ export const deleteImage = async (req: AuthRequest, res: Response): Promise<void
     }
 
     const wasPrimary = image.isPrimary;
-    const filePath = path.join(__dirname, '../../uploads/products', image.fileName);
 
     // Delete the image record from database first
     await image.destroy();
@@ -255,14 +275,19 @@ export const deleteImage = async (req: AuthRequest, res: Response): Promise<void
       }
     }
 
-    // Try to delete physical file (non-blocking)
+    // Eliminar archivos físicos según el proveedor donde fueron almacenadas
     try {
-      deleteUploadedFile(filePath);
-      console.log(`Successfully deleted physical file: ${image.fileName}`);
+      await deleteStoredImage({
+        imageUrl: image.imageUrl,
+        fileName: image.fileName,
+        storageProvider: image.storageProvider,
+        publicId: image.publicId,
+        thumbnailPublicId: image.thumbnailPublicId,
+      });
+      console.log(`Imagen eliminada del almacenamiento (${image.storageProvider ?? 'local'})`);
     } catch (fileError) {
       // Log error but don't fail the request since DB record is already deleted
-      console.error(`Warning: Failed to delete physical file ${image.fileName}:`, fileError);
-      console.error('Database record has been deleted, but physical file may still exist.');
+      console.error(`Warning: Failed to delete stored image ${image.fileName}:`, fileError);
     }
 
     res.json({

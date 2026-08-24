@@ -6,9 +6,11 @@ import {
   updateHandler,
   deleteHandler,
   searchHandler,
+  getByBarcodeHandler,
 } from '../controllers/productController';
 import { authenticate } from '../middleware/auth';
 import { upload } from '../config/multer';
+import { uploadLimiter } from '../middleware/rateLimiter';
 
 const router = Router();
 
@@ -17,6 +19,12 @@ const router = Router();
  * Search products (must be before /:id route)
  */
 router.get('/search', authenticate, searchHandler);
+
+/**
+ * GET /api/products/by-barcode
+ * Get product by barcode
+ */
+router.get('/by-barcode', authenticate, getByBarcodeHandler);
 
 /**
  * GET /api/products
@@ -38,6 +46,7 @@ router.get('/:id', authenticate, getByIdHandler);
 router.post(
   '/',
   authenticate,
+  uploadLimiter,
   upload.array('images', 10), // Accept up to 10 images
   createHandler
 );
@@ -50,6 +59,7 @@ router.post(
 router.put(
   '/:id',
   authenticate,
+  uploadLimiter,
   upload.array('images', 10), // Accept up to 10 images
   updateHandler
 );

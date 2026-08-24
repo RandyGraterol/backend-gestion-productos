@@ -81,6 +81,133 @@ export const upload = multer({
 });
 
 /**
+ * Multer Configuration for App Version (APK) Uploads
+ */
+
+const getApkDir = (): string => {
+  const uploadDir = config.upload.dir;
+
+  if (path.isAbsolute(uploadDir)) {
+    return path.join(uploadDir, 'apk');
+  }
+
+  return path.join(process.cwd(), uploadDir, 'apk');
+};
+
+const apkDir = getApkDir();
+if (!fs.existsSync(apkDir)) {
+  fs.mkdirSync(apkDir, { recursive: true });
+  console.log(`✅ Created apk uploads directory: ${apkDir}`);
+}
+
+const apkStorage = multer.diskStorage({
+  destination: (_req: Request, _file: Express.Multer.File, cb) => {
+    cb(null, apkDir);
+  },
+  filename: (_req: Request, file: Express.Multer.File, cb) => {
+    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+    const ext = path.extname(file.originalname).toLowerCase();
+    const nameWithoutExt = path.basename(file.originalname, ext);
+    const sanitizedName = nameWithoutExt.replace(/[^a-zA-Z0-9._-]/g, '_');
+    cb(null, `${sanitizedName}-${uniqueSuffix}${ext}`);
+  },
+});
+
+const apkFileFilter = (
+  _req: Request,
+  file: Express.Multer.File,
+  cb: multer.FileFilterCallback
+) => {
+  const allowedExtensions = ['.apk', '.aab'];
+  const allowedMimeTypes = [
+    'application/vnd.android.package-archive',
+    'application/octet-stream',
+    'application/java-archive',
+    'application/zip',
+  ];
+
+  const ext = path.extname(file.originalname).toLowerCase();
+
+  if (allowedExtensions.includes(ext) && (allowedMimeTypes.includes(file.mimetype) || file.mimetype === '')) {
+    cb(null, true);
+  } else {
+    cb(new Error('Invalid file type. Only .apk and .aab files are allowed.'));
+  }
+};
+
+// APK upload configuration - max 150MB
+export const uploadApk = multer({
+  storage: apkStorage,
+  fileFilter: apkFileFilter,
+  limits: {
+    fileSize: 150 * 1024 * 1024,
+    files: 1,
+  },
+});
+
+/**
+ * Get the apk uploads directory path
+ */
+export const getApkDirectory = (): string => {
+  return apkDir;
+};
+
+/**
+ * Multer Configuration for Donation Screenshot Uploads
+ */
+
+const getDonationsDir = (): string => {
+  const uploadDir = config.upload.dir;
+
+  if (path.isAbsolute(uploadDir)) {
+    return path.join(uploadDir, 'donations');
+  }
+
+  return path.join(process.cwd(), uploadDir, 'donations');
+};
+
+const donationsDir = getDonationsDir();
+if (!fs.existsSync(donationsDir)) {
+  fs.mkdirSync(donationsDir, { recursive: true });
+  console.log(`✅ Created donations uploads directory: ${donationsDir}`);
+}
+
+const donationStorage = multer.diskStorage({
+  destination: (_req: Request, _file: Express.Multer.File, cb) => {
+    cb(null, donationsDir);
+  },
+  filename: (_req: Request, file: Express.Multer.File, cb) => {
+    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+    const ext = path.extname(file.originalname).toLowerCase();
+    cb(null, `comprobante-${uniqueSuffix}${ext}`);
+  },
+});
+
+const donationFileFilter = (
+  _req: Request,
+  file: Express.Multer.File,
+  cb: multer.FileFilterCallback
+) => {
+  const allowedMimeTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+
+  if (allowedMimeTypes.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Invalid file type. Only JPEG, PNG, and WebP images are allowed.'));
+  }
+};
+
+// Donation screenshot upload configuration - max 5MB, single file field 'screenshot'
+export const uploadDonationScreenshot = multer({
+  storage: donationStorage,
+  fileFilter: donationFileFilter,
+  limits: {
+    fileSize: 5 * 1024 * 1024,
+    files: 1,
+  },
+});
+
+/**
  * Helper function to delete uploaded file
  */
 export const deleteUploadedFile = (filePath: string): void => {
