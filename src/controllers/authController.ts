@@ -7,6 +7,7 @@ import {
   verifyToken,
 } from '../utils/jwt';
 import { config } from '../config/env';
+import { detectRegistrationIp } from '../services/ipDetectionService';
 
 /**
  * Register a new client (web or app)
@@ -24,6 +25,9 @@ export const registerHandler = async (
   try {
     const { email, password, name, phone, businessType } = req.body;
 
+    // Detect real IP and VPN status from the request
+    const ipInfo = await detectRegistrationIp(req);
+
     const result = await authService.register({
       email,
       password,
@@ -31,6 +35,9 @@ export const registerHandler = async (
       role: 'client',
       phone: phone ?? null,
       businessType: businessType ?? null,
+      registrationIp: ipInfo.ip,
+      registrationLocation: ipInfo.location,
+      isVpn: ipInfo.isVpn,
     });
 
     if ('needVerification' in result && result.needVerification) {

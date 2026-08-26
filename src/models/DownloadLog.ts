@@ -8,12 +8,14 @@ export interface DownloadLogAttributes {
   email: string;
   ipAddress?: string | null;
   userAgent?: string | null;
+  location?: string | null;
+  isVpn?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
 
 interface DownloadLogCreationAttributes
-  extends Optional<DownloadLogAttributes, 'id' | 'ipAddress' | 'userAgent' | 'createdAt' | 'updatedAt'> {}
+  extends Optional<DownloadLogAttributes, 'id' | 'ipAddress' | 'userAgent' | 'location' | 'isVpn' | 'createdAt' | 'updatedAt'> {}
 
 class DownloadLog
   extends Model<DownloadLogAttributes, DownloadLogCreationAttributes>
@@ -24,6 +26,8 @@ class DownloadLog
   public email!: string;
   public ipAddress?: string | null;
   public userAgent?: string | null;
+  public location?: string | null;
+  public isVpn?: boolean;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 }
@@ -56,6 +60,15 @@ DownloadLog.init(
     userAgent: {
       type: DataTypes.STRING(500),
       allowNull: true,
+    },
+    location: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+    },
+    isVpn: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
     },
     createdAt: {
       type: DataTypes.DATE,

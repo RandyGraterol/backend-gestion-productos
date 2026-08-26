@@ -42,7 +42,7 @@ export const authenticate = async (
     // Validar que el usuario aún exista y esté activo
     // (revoca acceso inmediato a cuentas eliminadas/desactivadas)
     const dbUser = await User.findByPk(decoded.id, {
-      attributes: ['id', 'email', 'name', 'role', 'ownerId', 'phone', 'businessType', 'emailVerified', 'avatar', 'isActive', 'createdAt', 'updatedAt'],
+      attributes: ['id', 'email', 'name', 'role', 'ownerId', 'phone', 'businessType', 'emailVerified', 'avatar', 'isActive', 'registrationIp', 'registrationLocation', 'isVpn', 'createdAt', 'updatedAt'],
     });
 
     if (!dbUser || !dbUser.isActive) {
@@ -65,6 +65,9 @@ export const authenticate = async (
       emailVerified: dbUser.emailVerified,
       avatar: dbUser.avatar ?? undefined,
       isActive: dbUser.isActive,
+      registrationIp: dbUser.registrationIp ?? undefined,
+      registrationLocation: dbUser.registrationLocation ?? undefined,
+      isVpn: dbUser.isVpn ?? false,
       createdAt: dbUser.createdAt,
       updatedAt: dbUser.updatedAt,
     } as any;

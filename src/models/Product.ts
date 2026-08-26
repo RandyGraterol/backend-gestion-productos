@@ -4,7 +4,10 @@ import { ProductAttributes } from '../types';
 
 // Define creation attributes (fields that are optional during creation)
 interface ProductCreationAttributes
-  extends Optional<ProductAttributes, 'id' | 'isActive' | 'createdAt' | 'updatedAt'> {}
+  extends Optional<
+    ProductAttributes,
+    'id' | 'userId' | 'categoryId' | 'description' | 'brand' | 'maxStock' | 'location' | 'barcode' | 'imageUrl' | 'expiryDate' | 'deletedAt' | 'createdAt' | 'updatedAt'
+  > {}
 
 /**
  * Product Model
@@ -33,6 +36,7 @@ class Product
   public imageUrl?: string;
   public expiryDate?: Date;
   public isActive!: boolean;
+  public deletedAt?: Date | null;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 }
@@ -86,13 +90,14 @@ Product.init(
       allowNull: true,
     },
     categoryId: {
+      // Nullable: un producto puede quedar "Sin categoría" al eliminarla
       type: DataTypes.UUID,
-      allowNull: false,
+      allowNull: true,
       references: {
         model: 'categories',
         key: 'id',
       },
-      onDelete: 'RESTRICT',
+      onDelete: 'SET NULL',
       onUpdate: 'CASCADE',
     },
     brand: {
@@ -223,6 +228,8 @@ Product.init(
     sequelize,
     tableName: 'products',
     timestamps: true,
+    // Soft delete: excluye automáticamente registros con deletedAt
+    paranoid: true,
   }
 );
 

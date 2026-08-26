@@ -21,6 +21,7 @@ class Category
   public parentId?: string;
   public icon?: string;
   public color?: string;
+  public deletedAt?: Date | null;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 }
@@ -97,6 +98,8 @@ Category.init(
     sequelize,
     tableName: 'categories',
     timestamps: true,
+    // Soft delete: excluye automáticamente registros con deletedAt
+    paranoid: true,
   }
 );
 

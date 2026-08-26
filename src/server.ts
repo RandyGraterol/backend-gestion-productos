@@ -19,6 +19,18 @@ import { seedDefaultCategoriesForAllUsers } from './services/categoryService';
  */
 const app = express();
 
+// Confía en 1 proxy (Docker/nginx) para que express-rate-limit
+// use la IP real del cliente y no emita ERR_ERL_PERMISSIVE_TRUST_PROXY
+app.set('trust proxy', Number(process.env.TRUST_PROXY ?? 1));
+
+// Trust proxy settings:
+// - 'loopback': trusts 127.0.0.1/8 and ::1 (local proxies)
+// - For production behind a known proxy, use the number of proxy hops:
+//   app.set('trust proxy', 1)  // e.g. 1 reverse proxy
+// See: https://expressjs.com/en/guide/behind-proxies.html
+const trustProxy = config.server.isProduction ? 1 : 'loopback';
+app.set('trust proxy', trustProxy);
+
 /**
  * Configure CORS
  * Configuración unificada para requests normales y preflight OPTIONS
@@ -156,7 +168,10 @@ const startServer = async () => {
 
     // Initialize database without forcing or altering
     console.log('Initializing database...');
-    await initializeDatabase();
+    await initializeDatabase({
+      force: config.database.forceSync,
+      alter: config.database.alterSync,
+    });
 
     // Seed default categories for users who don't have any
     await seedDefaultCategoriesForAllUsers();

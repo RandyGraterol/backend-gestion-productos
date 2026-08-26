@@ -175,6 +175,8 @@ export interface LogDownloadInput {
   email: string;
   ipAddress?: string | null;
   userAgent?: string | null;
+  location?: string | null;
+  isVpn?: boolean;
 }
 
 export const logDownload = async (input: LogDownloadInput): Promise<void> => {
@@ -184,6 +186,8 @@ export const logDownload = async (input: LogDownloadInput): Promise<void> => {
       email: input.email.trim().toLowerCase(),
       ipAddress: input.ipAddress || null,
       userAgent: input.userAgent?.slice(0, 500) || null,
+      location: input.location ?? null,
+      isVpn: input.isVpn ?? false,
     });
   } catch (error) {
     // Never block a download because logging failed

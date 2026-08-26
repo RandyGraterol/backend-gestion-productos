@@ -86,7 +86,7 @@ const isEmailAlreadyVerified = async (
  * - Si no, la cuenta nace sin verificar y se envía un código de un solo uso.
  */
 export const register = async (
-  userData: UserCreationAttributes & { phone?: string; businessType?: string }
+  userData: UserCreationAttributes & { phone?: string; businessType?: string; registrationIp?: string | null; registrationLocation?: string | null; isVpn?: boolean }
 ): Promise<
   | { needVerification: true; email: string }
   | { user: UserResponse; token: string; refreshToken: string }
@@ -98,6 +98,9 @@ export const register = async (
       role: 'client',
       emailVerified: false,
       trialStartDate: new Date(), // Iniciar periodo de prueba de 30 días
+      registrationIp: userData.registrationIp ?? null,
+      registrationLocation: userData.registrationLocation ?? null,
+      isVpn: userData.isVpn ?? false,
     } as any);
 
     // Seed default categories for the new user

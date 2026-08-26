@@ -52,7 +52,7 @@ export const getAllCategories = async (
   search?: string
 ): Promise<{ data: CategoryAttributes[]; pagination: { page: number; limit: number; total: number; totalPages: number } }> => {
   const offset = (page - 1) * limit;
-  const where: any = { userId };
+  const where: any = { userId, deletedAt: null };
 
   if (search) {
     where[Op.or] = [
@@ -98,7 +98,7 @@ export const getAllCategories = async (
  * @returns Category with relationships
  */
 export const getCategoryById = async (id: string, userId?: string): Promise<CategoryAttributes> => {
-  const where: any = { id };
+  const where: any = { id, deletedAt: null };
   if (userId) where.userId = userId;
 
   const category = await Category.findOne({
@@ -136,7 +136,7 @@ export const updateCategory = async (
   updateData: Partial<CategoryCreationAttributes>,
   userId?: string
 ): Promise<CategoryAttributes> => {
-  const where: any = { id };
+  const where: any = { id, deletedAt: null };
   if (userId) where.userId = userId;
 
   const category = await Category.findOne({ where });
@@ -187,7 +187,7 @@ export const updateCategory = async (
  * @param userId - User ID for isolation
  */
 export const deleteCategory = async (id: string, userId?: string): Promise<void> => {
-  const where: any = { id };
+  const where: any = { id, deletedAt: null };
   if (userId) where.userId = userId;
 
   const category = await Category.findOne({ where });
@@ -196,20 +196,14 @@ export const deleteCategory = async (id: string, userId?: string): Promise<void>
     throw new AppError('Category not found', 404);
   }
 
-  // Check if category has associated products for this user
-  const productWhere: any = { categoryId: id };
-  if (userId) productWhere.userId = userId;
+  // Soft delete: los productos asociados pasan a "Sin categoría"
+  await Product.update(
+    { categoryId: null },
+    { where: { categoryId: id } }
+  );
 
-  const productCount = await Product.count({ where: productWhere });
-
-  if (productCount > 0) {
-    throw new AppError(
-      `Cannot delete category with ${productCount} associated product(s)`,
-      400
-    );
-  }
-
-  await category.destroy();
+  category.setDataValue('deletedAt', new Date());
+  await category.save();
 };
 
 /**

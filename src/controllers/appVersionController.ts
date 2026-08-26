@@ -5,6 +5,7 @@ import * as donationService from '../services/donationService';
 import { User } from '../models';
 import { verifyToken } from '../utils/jwt';
 import { AuthRequest } from '../types';
+import { detectRegistrationIp } from '../services/ipDetectionService';
 
 /**
  * Public: request a one-time code to confirm email before downloading
@@ -170,6 +171,9 @@ export const downloadVersionHandler = async (
       }
     }
 
+    // Detect IP and VPN status for download logging
+    const ipInfo = await detectRegistrationIp(req);
+
     if (!isAdminDownload && !verifiedUserEmail) {
       const token = typeof req.query.token === 'string' ? req.query.token : '';
       // Consume the one-time token issued after email verification
@@ -179,16 +183,20 @@ export const downloadVersionHandler = async (
       await donationService.logDownload({
         appVersionId: id,
         email: verification.email,
-        ipAddress: req.ip,
+        ipAddress: ipInfo.ip,
         userAgent: req.headers['user-agent'] ?? null,
+        location: ipInfo.location,
+        isVpn: ipInfo.isVpn,
       });
     } else if (verifiedUserEmail) {
       // Usuario autenticado con correo verificado: cuenta y registra igual
       await donationService.logDownload({
         appVersionId: id,
         email: verifiedUserEmail,
-        ipAddress: req.ip,
+        ipAddress: ipInfo.ip,
         userAgent: req.headers['user-agent'] ?? null,
+        location: ipInfo.location,
+        isVpn: ipInfo.isVpn,
       });
     }
 

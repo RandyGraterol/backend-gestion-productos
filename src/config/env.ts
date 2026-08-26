@@ -61,9 +61,11 @@ export const databaseConfig = {
   // SQLite (desarrollo)
   path: getEnv('DB_PATH', './database/inventory.sqlite'),
   // Common
-  logging: getEnvBoolean('DB_LOGGING', true),
+  logging: getEnvBoolean('DB_LOGGING', false),
   sync: getEnvBoolean('DB_SYNC', true),
   forceSync: getEnvBoolean('DB_FORCE_SYNC', false),
+  /** Desarrollo: sincroniza cambios del modelo a la BD (agrega columnas) */
+  alterSync: getEnvBoolean('DB_SYNC_ALTER', false),
 };
 
 /**

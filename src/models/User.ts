@@ -7,7 +7,7 @@ import { hashPassword, comparePassword } from '../utils/password';
 interface UserCreationAttributes
   extends Optional<
     UserAttributes,
-    'id' | 'ownerId' | 'phone' | 'businessType' | 'emailVerified' | 'avatar' | 'isActive' | 'createdAt' | 'updatedAt'
+    'id' | 'ownerId' | 'phone' | 'businessType' | 'emailVerified' | 'avatar' | 'isActive' | 'registrationIp' | 'registrationLocation' | 'isVpn' | 'createdAt' | 'updatedAt'
   > {}
 
 /**
@@ -30,6 +30,9 @@ class User extends Model<UserAttributes, UserCreationAttributes> implements User
   public planStatus?: 'activo' | 'pendiente' | 'expirado' | null;
   public planExpiry?: Date | null;
   public trialStartDate?: Date | null;
+  public registrationIp?: string | null;
+  public registrationLocation?: string | null;
+  public isVpn?: boolean;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 
@@ -152,6 +155,24 @@ User.init(
       type: DataTypes.DATE,
       allowNull: true,
       defaultValue: null,
+    },
+    registrationIp: {
+      type: DataTypes.STRING(45),
+      allowNull: true,
+      defaultValue: null,
+      comment: 'IPv4 or IPv6 address from registration',
+    },
+    registrationLocation: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+      defaultValue: null,
+      comment: 'Country/City detected from registration IP',
+    },
+    isVpn: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+      comment: 'Whether registration IP belongs to a VPN/proxy network',
     },
     createdAt: {
       type: DataTypes.DATE,

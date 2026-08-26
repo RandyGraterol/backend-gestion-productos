@@ -99,11 +99,13 @@ services:
 
       # Logging
       LOG_LEVEL: debug
-      DB_LOGGING: "true"
+      DB_LOGGING: "false"
 
       # Database sync (desarrollo: true para crear tablas automáticas)
       DB_SYNC: "true"
       DB_FORCE_SYNC: "false"
+      # Agrega columnas nuevas del modelo automáticamente (solo desarrollo)
+      DB_SYNC_ALTER: "true"
 
       # Email - códigos de un solo uso para descargas
       # Configura estas variables en un archivo .env junto a este docker-compose

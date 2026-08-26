@@ -109,16 +109,33 @@ export const getCategoryStats = async (userId: string) => {
     SELECT 
       c."id",
       c."name",
-      c."icon",
-      c."color",
-      COUNT(p."id") as "productCount",
-      COALESCE(SUM(p."stock"), 0) as "totalStock",
+      COALESCE(c."icon", '') as "icon",
+      COALESCE(c."color", '#3B82F6') as "color",
+      COUNT(p."id")::int as "productCount",
+      COALESCE(SUM(p."stock"), 0)::int as "totalStock",
       COALESCE(SUM(p."price" * p."stock"), 0) as "totalValue"
     FROM "categories" c
-    LEFT JOIN "products" p ON c."id" = p."categoryId" AND p."isActive" = true
-    WHERE c."userId" = :userId
+    LEFT JOIN "products" p ON p."categoryId" = c."id" AND p."isActive" = true AND p."deletedAt" IS NULL
+    WHERE c."userId" = :userId AND c."deletedAt" IS NULL
     GROUP BY c."id", c."name", c."icon", c."color"
-    ORDER BY "totalValue" DESC
+
+    UNION ALL
+
+    SELECT 
+      md5('sin-categoria' || :userId)::uuid as "id",
+      'Sin categoría' as "name",
+      '' as "icon",
+      '#94A3B8' as "color",
+      COUNT(p."id")::int as "productCount",
+      COALESCE(SUM(p."stock"), 0)::int as "totalStock",
+      COALESCE(SUM(p."price" * p."stock"), 0) as "totalValue"
+    FROM "products" p
+    WHERE p."userId" = :userId AND p."deletedAt" IS NULL 
+      AND p."isActive" = true AND (p."categoryId" IS NULL
+        OR p."categoryId" IN (SELECT id FROM categories WHERE "deletedAt" IS NOT NULL))
+    HAVING COUNT(p."id") > 0
+
+    ORDER BY "productCount" DESC
     `,
     { replacements: { userId }, type: 'SELECT' }
   );
@@ -211,8 +228,8 @@ export const getPriceDistribution = async (userId: string) => {
       COALESCE(SUM(p."price" * p."stock"), 0) as "totalValue",
       COUNT(p."id") as "productCount"
     FROM "categories" c
-    LEFT JOIN "products" p ON c."id" = p."categoryId" AND p."isActive" = true
-    WHERE c."userId" = :userId
+    LEFT JOIN "products" p ON p."categoryId" = c."id" AND p."isActive" = true AND p."deletedAt" IS NULL
+    WHERE c."userId" = :userId AND c."deletedAt" IS NULL
     GROUP BY c."id", c."name"
     HAVING COUNT(p."id") > 0
     ORDER BY "totalValue" DESC
@@ -241,8 +258,8 @@ export const getTopSellingProducts = async (userId: string, limit: number = 5) =
       p."stock",
       c."name" as "category"
     FROM "products" p
-    LEFT JOIN "categories" c ON p."categoryId" = c."id"
-    WHERE p."userId" = :userId AND p."isActive" = true
+    LEFT JOIN "categories" c ON c."deletedAt" IS NULL AND p."categoryId" = c."id"
+    WHERE p."userId" = :userId AND p."isActive" = true AND p."deletedAt" IS NULL
     ORDER BY p."stock" DESC
     LIMIT :limit
     `,

@@ -78,12 +78,16 @@ export const createProduct = async (
       cleanedData.sku = sku;
     }
 
-    // Verify category exists AND belongs to the same user
-    const category = await Category.findOne({
-      where: { id: cleanedData.categoryId, userId: cleanedData.userId },
-    });
-    if (!category) {
-      throw new AppError('Category not found or does not belong to your inventory', 404);
+    // Categoría opcional: '' o null => Sin categoría
+    if (cleanedData.categoryId) {
+      const category = await Category.findOne({
+        where: { id: cleanedData.categoryId, userId: cleanedData.userId, deletedAt: null },
+      });
+      if (!category) {
+        throw new AppError('Category not found or does not belong to your inventory', 404);
+      }
+    } else {
+      cleanedData.categoryId = null as unknown as string;
     }
 
     const product = await Product.create(cleanedData);
@@ -125,7 +129,7 @@ export const getAllProducts = async (
   const offset = (page - 1) * limit;
 
   // Build where clause - always filter by userId
-  const where: any = { userId };
+  const where: any = { userId, deletedAt: null };
 
   if (search) {
     where[Op.or] = [
@@ -185,7 +189,7 @@ export const getAllProducts = async (
  * @returns Product with category and images relationships
  */
 export const getProductById = async (id: string, userId?: string): Promise<ProductAttributes> => {
-  const where: any = { id };
+  const where: any = { id, deletedAt: null };
   if (userId) where.userId = userId;
 
   const product = await Product.findOne({
@@ -228,7 +232,7 @@ export const updateProduct = async (
   updateData: Partial<ProductCreationAttributes>,
   userId?: string
 ): Promise<ProductAttributes> => {
-  const where: any = { id };
+  const where: any = { id, deletedAt: null };
   if (userId) where.userId = userId;
 
   const product = await Product.findOne({ where });
@@ -240,12 +244,14 @@ export const updateProduct = async (
   // Clean the data
   const cleanedData = cleanProductData(updateData);
 
-  // If updating categoryId, verify category exists and belongs to user
+  // If updating categoryId ('' => sin categoría), verify it exists and belongs to user
+  if ('categoryId' in cleanedData && userId) {
+    if (cleanedData.categoryId === '') cleanedData.categoryId = null;
+  }
   if (cleanedData.categoryId && userId) {
     const category = await Category.findOne({
       where: { id: cleanedData.categoryId, userId },
-    });
-    if (!category) {
+    });    if (!category) {
       throw new AppError('Category not found or does not belong to your inventory', 404);
     }
   }
@@ -289,7 +295,8 @@ export const updateProduct = async (
  * @param userId - User ID for isolation
  */
 export const deleteProduct = async (id: string, userId?: string): Promise<void> => {
-  const where: any = { id };
+  // Soft delete: el registro permanece por integridad de movimientos/imágenes
+  const where: any = { id, deletedAt: null };
   if (userId) where.userId = userId;
 
   const product = await Product.findOne({ where });
@@ -298,7 +305,9 @@ export const deleteProduct = async (id: string, userId?: string): Promise<void> 
     throw new AppError('Product not found', 404);
   }
 
-  await product.destroy();
+  product.setDataValue('deletedAt', new Date());
+  product.setDataValue('isActive', false);
+  await product.save();
 };
 
 /**

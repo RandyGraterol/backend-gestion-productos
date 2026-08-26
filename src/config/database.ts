@@ -5,7 +5,20 @@ import { config } from './env';
  * Sequelize instance - supports PostgreSQL and SQLite
  */
 const sequelizeConfig: any = {
-  logging: config.database.logging ? console.log : false,
+  logging: config.database.logging ? (sql: string) => {
+    // Skip noisy routine queries (SELECT, INSERT, UPDATE, DELETE)
+    const upperSql = sql.toUpperCase().trim();
+    if (
+      upperSql.startsWith('SELECT') ||
+      upperSql.startsWith('INSERT') ||
+      upperSql.startsWith('UPDATE') ||
+      upperSql.startsWith('DELETE')
+    ) {
+      return;
+    }
+    // Only show schema changes (CREATE TABLE, ALTER TABLE, etc.)
+    console.log(`🔧 DB: ${sql.substring(0, 300)}`);
+  } : false,
   define: {
     timestamps: true,
     underscored: false,

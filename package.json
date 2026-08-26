@@ -13,6 +13,7 @@
     "seed": "ts-node src/scripts/seedDatabase.ts",
     "seed:admin": "ts-node src/scripts/seedAdmin.ts",
     "migrate:expiry": "ts-node src/scripts/run-migration.ts",
+    "migrate:ip-vpn": "ts-node src/scripts/migrate-ip-vpn-fields.ts",
     "backfill:rates": "ts-node src/scripts/backfillExchangeRates.ts",
     "clean:db": "ts-node src/scripts/cleanDatabase.ts",
     "migrate:postgres": "ts-node src/scripts/migrate-to-postgres.ts",

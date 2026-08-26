@@ -46,6 +46,12 @@ export interface UserAttributes {
   planExpiry?: Date | null;
   /** Fecha de inicio del periodo de prueba gratuito (30 días) */
   trialStartDate?: Date | null;
+  /** IP pública real desde la que se registró el usuario */
+  registrationIp?: string | null;
+  /** País/CIudad detectados por la IP */
+  registrationLocation?: string | null;
+  /** true si la IP de registro pertenece a una red VPN/proxy */
+  isVpn?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -62,6 +68,9 @@ export interface UserCreationAttributes {
   emailVerified?: boolean;
   avatar?: string;
   isActive?: boolean;
+  registrationIp?: string | null;
+  registrationLocation?: string | null;
+  isVpn?: boolean;
 }
 
 // User without password for API responses
@@ -77,7 +86,7 @@ export interface ProductAttributes {
   sku: string;
   name: string;
   description?: string;
-  categoryId: string;
+  categoryId?: string | null;
   brand?: string;
   unit: string;
   price: number;
@@ -91,6 +100,7 @@ export interface ProductAttributes {
   imageUrl?: string;
   expiryDate?: Date;
   isActive: boolean;
+  deletedAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -155,6 +165,8 @@ export interface CategoryAttributes {
   parentId?: string;
   icon?: string;
   color?: string;
+  deletedAt?: Date | null;
+  isActive?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
