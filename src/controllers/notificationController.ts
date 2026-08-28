@@ -1,14 +1,21 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
+import { AuthRequest } from '../types';
 import * as notificationService from '../services/notificationService';
+import { resolveTenantId } from '../utils/tenant';
 
 /**
- * Get all notifications (low stock + expiring products)
+ * Get all notifications (low stock + expiring products) for the authenticated user
  */
-export async function getNotifications(req: Request, res: Response): Promise<void> {
+export async function getNotifications(req: AuthRequest, res: Response): Promise<void> {
   try {
-    const expiryDaysThreshold = parseInt(req.query.expiryDays as string) || 30;
+    const userId = resolveTenantId(req.user!);
+    if (!userId) {
+      res.status(401).json({ success: false, error: 'User authentication required' });
+      return;
+    }
 
-    const notifications = await notificationService.getAllNotifications(expiryDaysThreshold);
+    const expiryDaysThreshold = parseInt(req.query.expiryDays as string) || 30;
+    const notifications = await notificationService.getAllNotifications(userId, expiryDaysThreshold);
 
     res.json({
       success: true,
@@ -24,11 +31,17 @@ export async function getNotifications(req: Request, res: Response): Promise<voi
 }
 
 /**
- * Get low stock notifications only
+ * Get low stock notifications only for the authenticated user
  */
-export async function getLowStockNotifications(_req: Request, res: Response): Promise<void> {
+export async function getLowStockNotifications(req: AuthRequest, res: Response): Promise<void> {
   try {
-    const notifications = await notificationService.getLowStockProducts();
+    const userId = resolveTenantId(req.user!);
+    if (!userId) {
+      res.status(401).json({ success: false, error: 'User authentication required' });
+      return;
+    }
+
+    const notifications = await notificationService.getLowStockProductsForUser(userId);
 
     res.json({
       success: true,
@@ -44,12 +57,18 @@ export async function getLowStockNotifications(_req: Request, res: Response): Pr
 }
 
 /**
- * Get expiring products notifications only
+ * Get expiring products notifications only for the authenticated user
  */
-export async function getExpiringNotifications(req: Request, res: Response): Promise<void> {
+export async function getExpiringNotifications(req: AuthRequest, res: Response): Promise<void> {
   try {
+    const userId = resolveTenantId(req.user!);
+    if (!userId) {
+      res.status(401).json({ success: false, error: 'User authentication required' });
+      return;
+    }
+
     const expiryDaysThreshold = parseInt(req.query.expiryDays as string) || 30;
-    const notifications = await notificationService.getExpiringProducts(expiryDaysThreshold);
+    const notifications = await notificationService.getExpiringProductsForUser(userId, expiryDaysThreshold);
 
     res.json({
       success: true,

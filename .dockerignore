@@ -55,9 +55,10 @@ __tests__
 *.spec.js
 coverage
 
-# Scripts (not needed in production)
+# Scripts - keep migration scripts needed at runtime
 scripts/
-src/scripts/
+src/scripts/*
+!src/scripts/run-all-migrations.ts
 
 # Other config
 nodemon.json

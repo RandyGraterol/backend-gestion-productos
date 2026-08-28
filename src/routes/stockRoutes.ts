@@ -12,17 +12,17 @@ const router = Router();
 
 /**
  * POST /api/stock/movements
- * Create a new stock movement
+ * Create a new multi-product stock movement
+ * Body: { type, reason?, reference?, items: [{ productId, quantity }] }
  */
 router.post(
   '/movements',
   authenticate,
   validate([
-    { field: 'productId', required: true, type: 'string' },
     { field: 'type', required: true, type: 'string' },
-    { field: 'quantity', required: true, type: 'number', min: 1 },
     { field: 'reason', required: false, type: 'string' },
     { field: 'reference', required: false, type: 'string', max: 100 },
+    { field: 'items', required: true, type: 'array' },
   ]),
   createMovementHandler
 );
@@ -35,7 +35,7 @@ router.get('/movements', authenticate, getMovementsHandler);
 
 /**
  * GET /api/stock/movements/:id
- * Get stock movement by ID
+ * Get stock movement by ID with items
  */
 router.get('/movements/:id', authenticate, getMovementByIdHandler);
 

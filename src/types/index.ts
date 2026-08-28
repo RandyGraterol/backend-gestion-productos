@@ -211,6 +211,65 @@ export interface StockMovementCreationAttributes {
 }
 
 // ============================================
+// STOCK MOVEMENT ITEM TYPES (Multi-product support)
+// ============================================
+
+export interface StockMovementItemAttributes {
+  id: string;
+  movementId: string;
+  productId: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+  currency: 'USD' | 'VES';
+  exchangeRateSnapshot: number;
+  previousStock: number;
+  newStock: number;
+  createdAt: Date;
+}
+
+export interface StockMovementItemCreationAttributes {
+  id?: string;
+  movementId: string;
+  productId: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+  currency: 'USD' | 'VES';
+  exchangeRateSnapshot: number;
+  previousStock: number;
+  newStock: number;
+  createdAt?: Date;
+}
+
+// Updated StockMovement for header (multi-product)
+export interface StockMovementHeaderAttributes {
+  id: string;
+  type: MovementType;
+  reason?: string;
+  reference?: string;
+  userId: string;
+  exchangeRate?: number;
+  totalAmountUSD: number;
+  totalAmountVES: number;
+  itemCount: number;
+  createdAt: Date;
+}
+
+export interface StockMovementHeaderCreationAttributes {
+  id?: string;
+  type: MovementType;
+  reason?: string;
+  reference?: string;
+  userId: string;
+  exchangeRate?: number;
+  totalAmountUSD?: number;
+  totalAmountVES?: number;
+  itemCount?: number;
+  createdAt?: Date;
+}
+
+// ============================================
 // API RESPONSE TYPES
 // ============================================
 

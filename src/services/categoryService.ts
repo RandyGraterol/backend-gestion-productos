@@ -216,7 +216,7 @@ const DEFAULT_CATEGORIES = [
   { name: 'Hogar y Decoración', description: 'Artículos para el hogar y decoración', icon: 'home-outline', color: '#F59E0B' },
   { name: 'Salud y Belleza', description: 'Productos de cuidado personal y salud', icon: 'heart-outline', color: '#EF4444' },
   { name: 'Deportes y Fitness', description: 'Artículos deportivos y equipment', icon: 'football-outline', color: '#8B5CF6' },
-  { name: 'Herramientas', description: 'Herramientas manuales y eléctricas', icon: 'wrench-outline', color: '#6366F1' },
+  { name: 'Herramientas', description: 'Herramientas manuales y eléctricas', icon: 'construct-outline', color: '#6366F1' },
   { name: 'Juguetes y Juegos', description: 'Juguetes, juegos y entretenimiento', icon: 'game-controller-outline', color: '#06B6D4' },
   { name: 'Libros y Papelería', description: 'Material de lectura y oficina', icon: 'book-outline', color: '#14B8A6' },
   { name: 'Automotriz', description: 'Accesorios y repuestos para vehículos', icon: 'car-outline', color: '#64748B' },

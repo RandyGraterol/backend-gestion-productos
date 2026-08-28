@@ -1,82 +1,210 @@
 import { Op, Transaction } from 'sequelize';
 import { sequelize } from '../config/database';
-import { StockMovement, Product, User } from '../models';
-import { StockMovementCreationAttributes, StockMovementAttributes, MovementType } from '../types';
+import { StockMovement, StockMovementItem, Product, User } from '../models';
+import { 
+  StockMovementHeaderAttributes,
+  StockMovementItemAttributes,
+  MovementType 
+} from '../types';
 import { AppError } from '../types';
 import { getCachedRates } from './exchangeRateService';
 
+export interface MovementItemInput {
+  productId: string;
+  quantity: number;
+}
+
+export interface CreateMultiMovementData {
+  type: MovementType;
+  reason?: string;
+  reference?: string;
+  userId: string;
+  items: MovementItemInput[];
+}
+
 /**
- * Create a stock movement with atomic transaction
- * @param movementData - Stock movement creation data
- * @returns Created stock movement with relationships
+ * Calculate price totals with currency conversion
+ * @param items - Movement items
+ * @param exchangeRate - Current exchange rate
+ * @param userId - User ID for multi-tenant isolation
+ */
+const calculateTotals = async (
+  items: MovementItemInput[],
+  exchangeRate: number,
+  userId: string
+): Promise<{ totalUSD: number; totalVES: number; itemsWithPrices: any[] }> => {
+  const productIds = items.map(i => i.productId);
+  const products = await Product.findAll({
+    where: { id: productIds, userId },
+    attributes: ['id', 'price', 'cost', 'currency', 'stock'],
+  });
+
+  const productMap = new Map(products.map(p => [p.id, p]));
+  
+  let totalUSD = 0;
+  let totalVES = 0;
+  const itemsWithPrices: any[] = [];
+
+  for (const item of items) {
+    const product = productMap.get(item.productId);
+    if (!product) {
+      throw new AppError(`Product not found: ${item.productId}`, 404);
+    }
+
+    const unitPrice = parseFloat(product.price.toString());
+    const totalPrice = unitPrice * item.quantity;
+
+    let priceUSD: number;
+    let priceVES: number;
+
+    if (product.currency === 'USD') {
+      priceUSD = totalPrice;
+      priceVES = totalPrice * exchangeRate;
+    } else {
+      priceVES = totalPrice;
+      priceUSD = totalPrice / exchangeRate;
+    }
+
+    totalUSD += priceUSD;
+    totalVES += priceVES;
+
+    itemsWithPrices.push({
+      ...item,
+      product,
+      unitPrice,
+      totalPrice,
+      priceUSD,
+      priceVES,
+    });
+  }
+
+  return { totalUSD, totalVES, itemsWithPrices };
+};
+
+/**
+ * Validate stock availability for 'out' and 'transfer' movements
+ * @param items - Movement items
+ * @param type - Movement type
+ * @param userId - User ID for multi-tenant isolation
+ */
+const validateStock = async (
+  items: MovementItemInput[],
+  type: MovementType,
+  userId: string
+): Promise<void> => {
+  const productIds = items.map(i => i.productId);
+  const products = await Product.findAll({
+    where: { id: productIds, userId },
+    attributes: ['id', 'name', 'stock'],
+  });
+
+  const productMap = new Map(products.map(p => [p.id, p]));
+
+  for (const item of items) {
+    const product = productMap.get(item.productId);
+    if (!product) {
+      throw new AppError(`Product not found: ${item.productId}`, 404);
+    }
+
+    if (type === 'out' || type === 'transfer') {
+      if (product.stock < item.quantity) {
+        throw new AppError(
+          `Insufficient stock for "${product.name}". Current: ${product.stock}, requested: ${item.quantity}`,
+          400
+        );
+      }
+    }
+  }
+};
+
+/**
+ * Create a multi-product stock movement with atomic transaction
+ * @param movementData - Stock movement creation data with multiple items
+ * @returns Created stock movement with items
  */
 export const createStockMovement = async (
-  movementData: StockMovementCreationAttributes
-): Promise<StockMovementAttributes> => {
-  // Start a transaction to ensure atomicity
+  movementData: CreateMultiMovementData
+): Promise<{ movement: StockMovementHeaderAttributes; items: StockMovementItemAttributes[] }> => {
   const transaction: Transaction = await sequelize.transaction();
 
   try {
-    // Get the product with lock to prevent race conditions
-    const product = await Product.findByPk(movementData.productId, {
-      lock: true,
-      transaction,
-    });
-
-    if (!product) {
-      throw new AppError('Product not found', 404);
-    }
-
-    // Calculate new stock based on movement type
-    const previousStock = product.stock;
-    let newStock = previousStock;
-
-    switch (movementData.type) {
-      case 'in':
-        newStock = previousStock + movementData.quantity;
-        break;
-      case 'out':
-        newStock = previousStock - movementData.quantity;
-        break;
-      case 'adjustment':
-        // For adjustments, summing the quantity, or replace to exactly 0 if user passes 0
-        if (movementData.quantity === 0) {
-          newStock = 0;
-        } else {
-          newStock = previousStock + movementData.quantity;
-        }
-        break;
-      case 'transfer':
-        // For transfers, we subtract the quantity
-        newStock = previousStock - movementData.quantity;
-        break;
-    }
-
-    // Prevent negative stock
-    if (newStock < 0) {
-      throw new AppError(
-        `Insufficient stock. Current stock: ${previousStock}, requested: ${movementData.quantity}`,
-        400
-      );
-    }
+    // Validate stock before proceeding
+    await validateStock(movementData.items, movementData.type, movementData.userId);
 
     // Capture current BCV exchange rate for accounting traceability
     const cached = getCachedRates();
-    const exchangeRate = cached?.official ?? undefined;
+    const exchangeRate = cached?.official ?? 1;
 
-    // Create stock movement record
+    // Calculate totals with price conversion
+    const { totalUSD, totalVES, itemsWithPrices } = await calculateTotals(
+      movementData.items,
+      exchangeRate,
+      movementData.userId
+    );
+
+    // Create header movement
     const movement = await StockMovement.create(
       {
-        ...movementData,
-        previousStock,
-        newStock,
+        type: movementData.type,
+        reason: movementData.reason,
+        reference: movementData.reference,
+        userId: movementData.userId,
         exchangeRate,
+        totalAmountUSD: totalUSD,
+        totalAmountVES: totalVES,
+        itemCount: movementData.items.length,
       },
       { transaction }
     );
 
-    // Update product stock atomically
-    await product.update({ stock: newStock }, { transaction });
+    // Create items and update product stock
+    const createdItems: StockMovementItemAttributes[] = [];
+
+    for (const itemData of itemsWithPrices) {
+      const product = itemData.product;
+      const previousStock = product.stock;
+      let newStock = previousStock;
+
+      switch (movementData.type) {
+        case 'in':
+          newStock = previousStock + itemData.quantity;
+          break;
+        case 'out':
+          newStock = previousStock - itemData.quantity;
+          break;
+        case 'adjustment':
+          if (itemData.quantity === 0) {
+            newStock = 0;
+          } else {
+            newStock = previousStock + itemData.quantity;
+          }
+          break;
+        case 'transfer':
+          newStock = previousStock - itemData.quantity;
+          break;
+      }
+
+      // Create movement item
+      const item = await StockMovementItem.create(
+        {
+          movementId: movement.id,
+          productId: itemData.productId,
+          quantity: itemData.quantity,
+          unitPrice: itemData.unitPrice,
+          totalPrice: itemData.totalPrice,
+          currency: product.currency,
+          exchangeRateSnapshot: exchangeRate,
+          previousStock,
+          newStock,
+        },
+        { transaction }
+      );
+
+      // Update product stock atomically
+      await product.update({ stock: newStock }, { transaction });
+
+      createdItems.push(item.toJSON());
+    }
 
     // Commit transaction
     await transaction.commit();
@@ -85,9 +213,15 @@ export const createStockMovement = async (
     await movement.reload({
       include: [
         {
-          model: Product,
-          as: 'product',
-          attributes: ['id', 'sku', 'name', 'unit'],
+          model: StockMovementItem,
+          as: 'items',
+          include: [
+            {
+              model: Product,
+              as: 'product',
+              attributes: ['id', 'sku', 'name', 'unit', 'currency', 'price'],
+            },
+          ],
         },
         {
           model: User,
@@ -105,7 +239,10 @@ export const createStockMovement = async (
       // Notification failure shouldn't break the movement
     }
 
-    return movement.toJSON();
+    return {
+      movement: movement.toJSON(),
+      items: createdItems,
+    };
   } catch (error) {
     // Rollback transaction on any error
     await transaction.rollback();
@@ -114,19 +251,16 @@ export const createStockMovement = async (
 };
 
 /**
- * Get stock movements with filters
- * @param filters - Filter options
- * @returns Array of stock movements with relationships
+ * Get stock movements with filters (header only, items loaded on demand)
  */
 export const getStockMovements = async (filters?: {
-  productId?: string;
   userId?: string;
   type?: MovementType;
   dateFrom?: Date;
   dateTo?: Date;
   page?: number;
   limit?: number;
-}): Promise<{ data: StockMovementAttributes[]; pagination: { page: number; limit: number; total: number; totalPages: number } }> => {
+}): Promise<{ data: StockMovementHeaderAttributes[]; pagination: { page: number; limit: number; total: number; totalPages: number } }> => {
   const where: any = {};
   const page = filters?.page || 1;
   const limit = filters?.limit || 20;
@@ -135,11 +269,6 @@ export const getStockMovements = async (filters?: {
   // Always filter by userId for multi-tenant isolation
   if (filters?.userId) {
     where.userId = filters.userId;
-  }
-
-  // Apply other filters
-  if (filters?.productId) {
-    where.productId = filters.productId;
   }
 
   if (filters?.type) {
@@ -160,11 +289,6 @@ export const getStockMovements = async (filters?: {
   const { count, rows } = await StockMovement.findAndCountAll({
     where,
     include: [
-      {
-        model: Product,
-        as: 'product',
-        attributes: ['id', 'sku', 'name', 'unit'],
-      },
       {
         model: User,
         as: 'user',
@@ -188,18 +312,25 @@ export const getStockMovements = async (filters?: {
 };
 
 /**
- * Get stock movement by ID
- * @param id - Movement ID
- * @returns Stock movement with relationships
+ * Get stock movement by ID with items
  */
-export const getStockMovementById = async (id: string, userId?: string): Promise<StockMovementAttributes> => {
+export const getStockMovementById = async (
+  id: string,
+  userId?: string
+): Promise<{ movement: StockMovementHeaderAttributes; items: StockMovementItemAttributes[] }> => {
   const movement = await StockMovement.findOne({
     where: { id, ...(userId ? { userId } : {}) },
     include: [
       {
-        model: Product,
-        as: 'product',
-        attributes: ['id', 'sku', 'name', 'unit'],
+        model: StockMovementItem,
+        as: 'items',
+        include: [
+          {
+            model: Product,
+            as: 'product',
+            attributes: ['id', 'sku', 'name', 'unit', 'currency', 'price', 'cost'],
+          },
+        ],
       },
       {
         model: User,
@@ -213,20 +344,20 @@ export const getStockMovementById = async (id: string, userId?: string): Promise
     throw new AppError('Stock movement not found', 404);
   }
 
-  return movement.toJSON();
+  return {
+    movement: movement.toJSON(),
+    items: movement.items?.map(item => item.toJSON()) || [],
+  };
 };
 
 /**
- * Get stock movements for a specific product
- * @param productId - Product ID
- * @param limit - Maximum number of movements to return
- * @returns Array of stock movements
+ * Get stock movements for a specific product (via items table)
  */
 export const getProductStockHistory = async (
   productId: string,
   limit: number = 50,
   userId?: string
-): Promise<StockMovementAttributes[]> => {
+): Promise<StockMovementItemAttributes[]> => {
   // Verificar que el producto pertenezca al tenant
   const product = await Product.findOne({
     where: { id: productId, ...(userId ? { userId } : {}) },
@@ -237,18 +368,26 @@ export const getProductStockHistory = async (
     throw new AppError('Product not found', 404);
   }
 
-  const movements = await StockMovement.findAll({
+  const items = await StockMovementItem.findAll({
     where: { productId },
     include: [
       {
-        model: User,
-        as: 'user',
-        attributes: ['id', 'name', 'email'],
+        model: StockMovement,
+        as: 'movement',
+        where: userId ? { userId } : {},
+        attributes: ['id', 'type', 'reason', 'reference', 'createdAt', 'userId'],
+        include: [
+          {
+            model: User,
+            as: 'user',
+            attributes: ['id', 'name', 'email'],
+          },
+        ],
       },
     ],
-    order: [['createdAt', 'DESC']],
+    order: [[{ model: StockMovement, as: 'movement' }, 'createdAt', 'DESC']],
     limit,
   });
 
-  return movements.map(movement => movement.toJSON());
+  return items.map(item => item.toJSON());
 };

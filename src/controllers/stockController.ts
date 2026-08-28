@@ -4,8 +4,9 @@ import { AuthRequest } from '../types';
 import { resolveTenantId, resolveTenantIdWithBypass } from '../utils/tenant';
 
 /**
- * Create a stock movement
+ * Create a multi-product stock movement
  * POST /api/stock/movements
+ * Body: { type, reason?, reference?, items: [{ productId, quantity }] }
  */
 export const createMovementHandler = async (
   req: AuthRequest,
@@ -23,17 +24,41 @@ export const createMovementHandler = async (
       return;
     }
 
-    // Add userId from authenticated user
+    // Validate items array
+    const { type, reason, reference, items } = req.body;
+
+    if (!type || !items || !Array.isArray(items) || items.length === 0) {
+      res.status(400).json({
+        success: false,
+        error: 'Invalid request: type and items[] are required',
+      });
+      return;
+    }
+
+    // Validate each item
+    for (const item of items) {
+      if (!item.productId || !item.quantity || item.quantity < 1) {
+        res.status(400).json({
+          success: false,
+          error: 'Each item must have productId and quantity >= 1',
+        });
+        return;
+      }
+    }
+
     const movementData = {
-      ...req.body,
+      type,
+      reason,
+      reference,
       userId,
+      items,
     };
 
-    const movement = await stockService.createStockMovement(movementData);
+    const result = await stockService.createStockMovement(movementData);
 
     res.status(201).json({
       success: true,
-      data: movement,
+      data: result,
       message: 'Stock movement created successfully',
     });
   } catch (error) {
@@ -62,7 +87,6 @@ export const getMovementsHandler = async (
     const limit = parseInt(req.query.limit as string) || 20;
 
     const filters = {
-      productId: req.query.productId as string,
       userId, // Always filter by authenticated user
       type: req.query.type as any,
       dateFrom: req.query.dateFrom ? new Date(req.query.dateFrom as string) : undefined,
@@ -84,7 +108,7 @@ export const getMovementsHandler = async (
 };
 
 /**
- * Get stock movement by ID
+ * Get stock movement by ID with items
  * GET /api/stock/movements/:id
  */
 export const getMovementByIdHandler = async (
@@ -94,11 +118,11 @@ export const getMovementByIdHandler = async (
 ): Promise<void> => {
   try {
     const userId = resolveTenantId(req.user!);
-    const movement = await stockService.getStockMovementById(req.params.id, userId);
+    const result = await stockService.getStockMovementById(req.params.id, userId);
 
     res.status(200).json({
       success: true,
-      data: movement,
+      data: result,
     });
   } catch (error) {
     next(error);
@@ -117,11 +141,11 @@ export const getProductHistoryHandler = async (
   try {
     const userId = resolveTenantId(req.user!);
     const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
-    const movements = await stockService.getProductStockHistory(req.params.productId, limit, userId);
+    const items = await stockService.getProductStockHistory(req.params.productId, limit, userId);
 
     res.status(200).json({
       success: true,
-      data: movements,
+      data: items,
     });
   } catch (error) {
     next(error);

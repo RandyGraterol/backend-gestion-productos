@@ -3,6 +3,7 @@ import Category from './Category';
 import Product from './Product';
 import User from './User';
 import StockMovement from './StockMovement';
+import StockMovementItem from './StockMovementItem';
 import ProductImage from './ProductImage';
 import Notification from './Notification';
 import AppVersion from './AppVersion';
@@ -58,14 +59,9 @@ Category.belongsTo(Category, {
 });
 
 // Product associations
-Product.belongsTo(Category, {
-  foreignKey: 'categoryId',
-  as: 'category',
-});
-
-Product.hasMany(StockMovement, {
+Product.hasMany(StockMovementItem, {
   foreignKey: 'productId',
-  as: 'stockMovements',
+  as: 'stockMovementItems',
 });
 
 Product.hasMany(ProductImage, {
@@ -99,14 +95,25 @@ Notification.belongsTo(User, {
 });
 
 // StockMovement associations
-StockMovement.belongsTo(Product, {
-  foreignKey: 'productId',
-  as: 'product',
-});
-
 StockMovement.belongsTo(User, {
   foreignKey: 'userId',
   as: 'user',
+});
+
+StockMovement.hasMany(StockMovementItem, {
+  foreignKey: 'movementId',
+  as: 'items',
+  onDelete: 'CASCADE',
+});
+
+StockMovementItem.belongsTo(StockMovement, {
+  foreignKey: 'movementId',
+  as: 'movement',
+});
+
+StockMovementItem.belongsTo(Product, {
+  foreignKey: 'productId',
+  as: 'product',
 });
 
 // AppVersion associations
@@ -158,4 +165,4 @@ export const initializeDatabase = async (options: { force?: boolean; alter?: boo
 /**
  * Export all models
  */
-export { Category, Product, User, StockMovement, ProductImage, Notification, AppVersion, DownloadVerification, DonationMethod, Donation, DownloadLog, ContactMessage, MembershipPayment, sequelize };
+export { Category, Product, User, StockMovement, StockMovementItem, ProductImage, Notification, AppVersion, DownloadVerification, DonationMethod, Donation, DownloadLog, ContactMessage, MembershipPayment, sequelize };

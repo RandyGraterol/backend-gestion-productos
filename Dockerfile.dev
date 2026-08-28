@@ -21,11 +21,15 @@ COPY src/ ./src/
 # Create necessary directories
 RUN mkdir -p uploads backups logs database
 
+# Copy entrypoint script for dev
+COPY entrypoint.dev.sh ./entrypoint.dev.sh
+RUN chmod +x ./entrypoint.dev.sh
+
 # Expose port
 EXPOSE 3010
 
-# Entrypoint
-ENTRYPOINT ["dumb-init", "--"]
+# Entrypoint: run migrations then start dev server
+ENTRYPOINT ["dumb-init", "--", "./entrypoint.dev.sh"]
 
 # Start with nodemon for hot reload
 CMD ["npx", "nodemon", "--exec", "ts-node", "src/server.ts"]

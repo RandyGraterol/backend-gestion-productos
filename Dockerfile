@@ -45,6 +45,10 @@ COPY --from=builder /app/src/assets ./dist/assets
 RUN mkdir -p uploads backups logs database && \
     chown -R appuser:appgroup /app
 
+# Copy entrypoint script
+COPY entrypoint.sh ./entrypoint.sh
+RUN chmod +x ./entrypoint.sh
+
 # Switch to non-root user
 USER appuser
 
@@ -55,6 +59,6 @@ EXPOSE 3010
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:3010/health || exit 1
 
-# Start application
-ENTRYPOINT ["dumb-init", "--"]
+# Start application: run migrations then start server
+ENTRYPOINT ["dumb-init", "--", "./entrypoint.sh"]
 CMD ["node", "dist/server.js"]

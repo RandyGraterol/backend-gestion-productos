@@ -13,6 +13,7 @@ import { initRedis, closeRedis } from './config/redis';
 import { scheduleDailyRateUpdate } from './services/exchangeRateService';
 import { initSocket, startNotificationChecks, stopNotificationChecks } from './services/notificationService';
 import { seedDefaultCategoriesForAllUsers } from './services/categoryService';
+import { runAllMigrations } from './scripts/run-all-migrations';
 
 /**
  * Create Express application
@@ -165,6 +166,10 @@ const startServer = async () => {
 
     // Print configuration
     printConfig();
+
+    // Run idempotent migrations before database sync
+    console.log('Running migrations...');
+    await runAllMigrations();
 
     // Initialize database without forcing or altering
     console.log('Initializing database...');

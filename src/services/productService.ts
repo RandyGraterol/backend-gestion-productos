@@ -136,6 +136,7 @@ export const getAllProducts = async (
       { name: { [Op.like]: `%${search}%` } },
       { sku: { [Op.like]: `%${search}%` } },
       { brand: { [Op.like]: `%${search}%` } },
+      { barcode: { [Op.like]: `%${search}%` } },
     ];
   }
 

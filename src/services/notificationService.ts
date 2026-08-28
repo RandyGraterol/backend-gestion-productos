@@ -6,6 +6,8 @@
  * - Expiring products
  * - Product movement summaries
  * - Top/least sold products
+ *
+ * IMPORTANT: All queries MUST filter by userId for multi-tenant isolation.
  */
 
 import { Server as SocketServer } from 'socket.io';
@@ -86,6 +88,7 @@ let checkInterval: ReturnType<typeof setInterval> | null = null;
 
 /**
  * Start periodic notification checks (every 60 seconds)
+ * Checks low stock and expiring products for ALL active users
  */
 export function startNotificationChecks() {
   if (checkInterval) return;
@@ -93,8 +96,8 @@ export function startNotificationChecks() {
   console.log('🔔 Starting notification checks (every 60s)');
   checkInterval = setInterval(async () => {
     try {
-      await checkLowStock();
-      await checkExpiringProducts();
+      await checkLowStockForAllUsers();
+      await checkExpiringProductsForAllUsers();
     } catch (error) {
       console.error('Error in notification check:', error);
     }
@@ -103,8 +106,8 @@ export function startNotificationChecks() {
   // Run immediately on start
   setTimeout(async () => {
     try {
-      await checkLowStock();
-      await checkExpiringProducts();
+      await checkLowStockForAllUsers();
+      await checkExpiringProductsForAllUsers();
     } catch (error) {
       console.error('Error in initial notification check:', error);
     }
@@ -122,9 +125,9 @@ export function stopNotificationChecks() {
 }
 
 /**
- * Check for low stock products and notify
+ * Check for low stock products and notify EACH user about THEIR products only
  */
-async function checkLowStock() {
+async function checkLowStockForAllUsers() {
   try {
     const products = await Product.findAll({
       where: {
@@ -134,17 +137,28 @@ async function checkLowStock() {
       attributes: ['id', 'name', 'stock', 'minStock', 'userId'],
     });
 
+    // Group by userId to send targeted notifications
+    const byUser = new Map<string, typeof products>();
     for (const product of products) {
-      const notif: AppNotification = {
-        id: `low_stock_${product.id}_${Date.now()}`,
-        type: 'low_stock',
-        title: 'Stock bajo',
-        message: `"${product.name}" tiene ${product.stock} unidades (mínimo: ${product.minStock})`,
-        severity: product.stock === 0 ? 'error' : 'warning',
-        data: { productId: product.id, stock: product.stock, minStock: product.minStock },
-        createdAt: new Date().toISOString(),
-      };
-      emitToUser(product.userId, notif);
+      if (!product.userId) continue; // Skip products without owner
+      const list = byUser.get(product.userId) || [];
+      list.push(product);
+      byUser.set(product.userId, list);
+    }
+
+    for (const [userId, userProducts] of byUser) {
+      for (const product of userProducts) {
+        const notif: AppNotification = {
+          id: `low_stock_${product.id}_${Date.now()}`,
+          type: 'low_stock',
+          title: 'Stock bajo',
+          message: `"${product.name}" tiene ${product.stock} unidades (mínimo: ${product.minStock})`,
+          severity: product.stock === 0 ? 'error' : 'warning',
+          data: { productId: product.id, stock: product.stock, minStock: product.minStock },
+          createdAt: new Date().toISOString(),
+        };
+        emitToUser(userId, notif);
+      }
     }
   } catch (error) {
     console.error('Error checking low stock:', error);
@@ -152,9 +166,9 @@ async function checkLowStock() {
 }
 
 /**
- * Check for expiring products (within 7 days) and notify
+ * Check for expiring products (within 7 days) and notify EACH user about THEIR products only
  */
-async function checkExpiringProducts() {
+async function checkExpiringProductsForAllUsers() {
   try {
     const now = new Date();
     const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
@@ -170,20 +184,31 @@ async function checkExpiringProducts() {
       attributes: ['id', 'name', 'expiryDate', 'userId'],
     });
 
+    // Group by userId to send targeted notifications
+    const byUser = new Map<string, typeof products>();
     for (const product of products) {
-      const expiryDate = new Date(product.expiryDate!);
-      const daysLeft = Math.ceil((expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      if (!product.userId) continue;
+      const list = byUser.get(product.userId) || [];
+      list.push(product);
+      byUser.set(product.userId, list);
+    }
 
-      const notif: AppNotification = {
-        id: `expiring_${product.id}_${Date.now()}`,
-        type: 'expiring',
-        title: 'Producto por vencer',
-        message: `"${product.name}" vence en ${daysLeft} día${daysLeft !== 1 ? 's' : ''}`,
-        severity: daysLeft <= 2 ? 'error' : 'warning',
-        data: { productId: product.id, expiryDate: product.expiryDate, daysLeft },
-        createdAt: new Date().toISOString(),
-      };
-      emitToUser(product.userId, notif);
+    for (const [userId, userProducts] of byUser) {
+      for (const product of userProducts) {
+        const expiryDate = new Date(product.expiryDate!);
+        const daysLeft = Math.ceil((expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+        const notif: AppNotification = {
+          id: `expiring_${product.id}_${Date.now()}`,
+          type: 'expiring',
+          title: 'Producto por vencer',
+          message: `"${product.name}" vence en ${daysLeft} día${daysLeft !== 1 ? 's' : ''}`,
+          severity: daysLeft <= 2 ? 'error' : 'warning',
+          data: { productId: product.id, expiryDate: product.expiryDate, daysLeft },
+          createdAt: new Date().toISOString(),
+        };
+        emitToUser(userId, notif);
+      }
     }
   } catch (error) {
     console.error('Error checking expiring products:', error);
@@ -275,11 +300,13 @@ export function notifyCategoryAlert(userId: string, categoryName: string, produc
 // ============================================
 
 /**
- * Get all notifications (low stock + expiring products)
+ * Get all notifications (low stock + expiring products) for a specific user
+ * @param userId - User ID for multi-tenant isolation
+ * @param expiryDaysThreshold - Days threshold for expiry notifications
  */
-export async function getAllNotifications(expiryDaysThreshold: number = 30): Promise<AppNotification[]> {
-  const lowStock = await getLowStockProducts();
-  const expiring = await getExpiringProducts(expiryDaysThreshold);
+export async function getAllNotifications(userId: string, expiryDaysThreshold: number = 30): Promise<AppNotification[]> {
+  const lowStock = await getLowStockProductsForUser(userId);
+  const expiring = await getExpiringProductsForUser(userId, expiryDaysThreshold);
   return [...lowStock, ...expiring].sort((a, b) => {
     const severityOrder = { error: 0, warning: 1, info: 2, success: 3 };
     return (severityOrder[a.severity] ?? 4) - (severityOrder[b.severity] ?? 4);
@@ -287,11 +314,13 @@ export async function getAllNotifications(expiryDaysThreshold: number = 30): Pro
 }
 
 /**
- * Get low stock products as notifications
+ * Get low stock products as notifications for a specific user
+ * @param userId - User ID for multi-tenant isolation
  */
-export async function getLowStockProducts(): Promise<AppNotification[]> {
+export async function getLowStockProductsForUser(userId: string): Promise<AppNotification[]> {
   const products = await Product.findAll({
     where: {
+      userId,
       isActive: true,
       stock: { [Op.lte]: col('minStock') },
     },
@@ -310,14 +339,17 @@ export async function getLowStockProducts(): Promise<AppNotification[]> {
 }
 
 /**
- * Get expiring products as notifications
+ * Get expiring products as notifications for a specific user
+ * @param userId - User ID for multi-tenant isolation
+ * @param expiryDaysThreshold - Days threshold
  */
-export async function getExpiringProducts(expiryDaysThreshold: number = 30): Promise<AppNotification[]> {
+export async function getExpiringProductsForUser(userId: string, expiryDaysThreshold: number = 30): Promise<AppNotification[]> {
   const now = new Date();
   const threshold = new Date(now.getTime() + expiryDaysThreshold * 24 * 60 * 60 * 1000);
 
   const products = await Product.findAll({
     where: {
+      userId,
       isActive: true,
       expiryDate: {
         [Op.lte]: threshold,
