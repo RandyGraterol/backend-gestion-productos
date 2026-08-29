@@ -30,6 +30,7 @@ export const createHandler = async (
     if (files) {
       uploadedFiles.push(...files);
     }
+    console.log(`📷 Product create: ${uploadedFiles.length} image(s) uploaded, body keys: ${Object.keys(req.body).join(', ')}`);
     
     // Add userId to product data
     const productData = { ...req.body, userId };

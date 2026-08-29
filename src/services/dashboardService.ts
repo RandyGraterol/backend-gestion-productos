@@ -3,6 +3,7 @@ import { sequelize } from '../config/database';
 import Product from '../models/Product';
 import Category from '../models/Category';
 import StockMovement from '../models/StockMovement';
+import { getCachedRates } from './exchangeRateService';
 
 /**
  * Dashboard Service
@@ -30,12 +31,25 @@ export const getDashboardStats = async (userId: string, dateRange?: { from: Date
     where: { userId, isActive: true, stock: 0 },
   });
 
-  // Total inventory value for this user
+  // Total inventory value for this user (broken down by currency)
   const products = await Product.findAll({
     where: { userId, isActive: true },
-    attributes: ['price', 'stock', 'cost'],
+    attributes: ['price', 'stock', 'cost', 'currency'],
   });
-  const totalValue = products.reduce((sum, p) => sum + p.price * p.stock, 0);
+  const rawInventoryValueUSD = products
+    .filter(p => p.currency === 'USD')
+    .reduce((sum, p) => sum + p.price * p.stock, 0);
+  const rawInventoryValueVES = products
+    .filter(p => p.currency === 'VES')
+    .reduce((sum, p) => sum + p.price * p.stock, 0);
+
+  // Convert USD to VES using official rate for display
+  const rates = getCachedRates();
+  const officialRate = rates?.official ?? 1;
+  const inventoryValueUSD = rawInventoryValueUSD;
+  // VES display = native VES + USD converted to VES
+  const inventoryValueVES = rawInventoryValueVES + rawInventoryValueUSD * officialRate;
+  const totalValue = inventoryValueUSD + inventoryValueVES;
   const potentialProfit = products.reduce((sum, p) => sum + (p.price - p.cost) * p.stock, 0);
 
   // Total categories for this user
@@ -74,7 +88,7 @@ export const getDashboardStats = async (userId: string, dateRange?: { from: Date
 
   const movements = await StockMovement.findAll({
     where: movementWhere,
-    attributes: ['type'],
+    attributes: ['type', 'totalAmountUSD', 'totalAmountVES'],
   });
 
   const movementStats = {
@@ -84,14 +98,26 @@ export const getDashboardStats = async (userId: string, dateRange?: { from: Date
     adjustments: movements.filter(m => m.type === 'adjustment').length,
   };
 
+  // Total sold: sum of totalAmountUSD/VES from movements of type 'out'
+  const outMovements = movements.filter(m => m.type === 'out');
+  const rawTotalSoldUSD = outMovements.reduce((sum, m) => sum + (m.totalAmountUSD || 0), 0);
+  const rawTotalSoldVES = outMovements.reduce((sum, m) => sum + (m.totalAmountVES || 0), 0);
+  // VES display = native VES + USD converted to VES
+  const totalSoldUSD = rawTotalSoldUSD;
+  const totalSoldVES = rawTotalSoldVES + rawTotalSoldUSD * officialRate;
+
   return {
     totalProducts,
     activeProducts: totalProducts,
     lowStockCount,
     outOfStockCount,
+    inventoryValueUSD: parseFloat(inventoryValueUSD.toFixed(2)),
+    inventoryValueVES: parseFloat(inventoryValueVES.toFixed(2)),
     totalStockValue: parseFloat(totalValue.toFixed(2)),
     totalValue: parseFloat(totalValue.toFixed(2)),
     potentialProfit: parseFloat(potentialProfit.toFixed(2)),
+    totalSoldUSD: parseFloat(totalSoldUSD.toFixed(2)),
+    totalSoldVES: parseFloat(totalSoldVES.toFixed(2)),
     totalCategories,
     recentMovements,
     todayMovements,
