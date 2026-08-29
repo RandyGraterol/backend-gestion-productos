@@ -1,19 +1,14 @@
-import crypto from 'crypto';
 import { User } from '../models';
 import { UserCreationAttributes, UserResponse, AppError } from '../types';
 import {
   generateToken,
   generateRefreshToken,
 } from '../utils/jwt';
-import { sendPasswordResetEmail } from './emailService';
 import {
   requestDownloadCode,
   verifyDownloadCode,
 } from '../services/downloadVerificationService';
 import { seedDefaultCategories } from './categoryService';
-
-// In-memory store for reset tokens (use Redis in production)
-const resetTokens = new Map<string, { userId: string; expiresAt: Date }>();
 
 /** Días de gracia para que un operador verifique su correo */
 export const OPERATOR_GRACE_DAYS = 15;
@@ -259,62 +254,48 @@ export const login = async (
 };
 
 /**
- * Forgot password - Send reset email
+ * Forgot password - Send OTP code via email
+ * Reuses the same download verification infrastructure.
  */
 export const forgotPassword = async (email: string): Promise<{ message: string }> => {
-  const user = await User.findOne({ where: { email } });
+  const normalizedEmail = email.trim().toLowerCase();
+  const user = await User.findOne({ where: { email: normalizedEmail } });
 
   // Always return success message (security - don't reveal if email exists)
   if (!user) {
-    return { message: 'If the email exists, a reset link has been sent.' };
+    return { message: 'Si el correo existe, enviamos un código de verificación.' };
   }
 
-  // Generate reset token
-  const resetToken = crypto.randomBytes(32).toString('hex');
-  const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+  // Send OTP code (reuses download verification infrastructure)
+  await requestDownloadCode(normalizedEmail);
 
-  // Store token (use Redis in production)
-  resetTokens.set(resetToken, {
-    userId: user.id,
-    expiresAt,
-  });
-
-  // Send email
-  await sendPasswordResetEmail(email, resetToken, user.name);
-
-  return { message: 'If the email exists, a reset link has been sent.' };
+  return { message: 'Si el correo existe, enviamos un código de verificación.' };
 };
 
 /**
- * Reset password with token
+ * Reset password with OTP code
+ * Verifies the code and sets the new password.
  */
 export const resetPassword = async (
-  token: string,
+  email: string,
+  code: string,
   newPassword: string
 ): Promise<{ message: string }> => {
-  const tokenData = resetTokens.get(token);
+  const normalizedEmail = email.trim().toLowerCase();
 
-  if (!tokenData) {
-    throw new AppError('Invalid or expired reset token', 400);
-  }
+  // Verify the OTP code (reuses download verification infrastructure)
+  await verifyDownloadCode(normalizedEmail, code);
 
-  if (new Date() > tokenData.expiresAt) {
-    resetTokens.delete(token);
-    throw new AppError('Reset token has expired', 400);
-  }
-
-  const user = await User.findByPk(tokenData.userId);
-
+  // Find user and update password
+  const user = await User.findOne({ where: { email: normalizedEmail } });
   if (!user) {
-    throw new AppError('User not found', 404);
+    throw new AppError('Usuario no encontrado', 404);
   }
 
   user.set('password', newPassword);
   await user.save();
 
-  resetTokens.delete(token);
-
-  return { message: 'Password has been reset successfully.' };
+  return { message: 'Contraseña actualizada correctamente.' };
 };
 
 /**

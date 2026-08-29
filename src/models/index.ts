@@ -48,6 +48,11 @@ Category.hasMany(Product, {
   as: 'products',
 });
 
+Product.belongsTo(Category, {
+  foreignKey: 'categoryId',
+  as: 'category',
+});
+
 Category.hasMany(Category, {
   foreignKey: 'parentId',
   as: 'children',

@@ -132,7 +132,16 @@ export const createStockMovement = async (
     await validateStock(movementData.items, movementData.type, movementData.userId);
 
     // Capture current BCV exchange rate for accounting traceability
-    const cached = getCachedRates();
+    // If cache is empty, fetch fresh rates to ensure accurate conversion
+    let cached = getCachedRates();
+    if (!cached || !cached.official) {
+      try {
+        const { fetchExchangeRates } = await import('./exchangeRateService');
+        cached = await fetchExchangeRates(true);
+      } catch (err) {
+        console.warn('[StockService] Could not fetch exchange rates, defaulting to 1:', err);
+      }
+    }
     const exchangeRate = cached?.official ?? 1;
 
     // Calculate totals with price conversion
@@ -181,6 +190,9 @@ export const createStockMovement = async (
           break;
         case 'transfer':
           newStock = previousStock - itemData.quantity;
+          break;
+        case 'credit':
+          // Fiado: stock no se modifica (inventario ya descontado en venta original)
           break;
       }
 
@@ -231,10 +243,29 @@ export const createStockMovement = async (
       ],
     });
 
-    // Send real-time notification
+    // Send real-time notifications + entity events
     try {
-      const { notifyMovementSummary } = await import('./notificationService');
+      const { notifyMovementSummary, getIO } = await import('./notificationService');
       await notifyMovementSummary(movementData.userId);
+
+      // Emit real-time entity events for socket listeners
+      const io = getIO();
+      if (io) {
+        // Notify movement list to refresh
+        io.to(`user:${movementData.userId}`).emit('movement:created', {
+          id: movement.id,
+          type: movementData.type,
+          itemCount: movementData.items.length,
+        });
+
+        // Notify product list to refresh stock values
+        for (const item of itemsWithPrices) {
+          io.to(`user:${movementData.userId}`).emit('product:updated', {
+            id: item.productId,
+            stock: item.product.stock,
+          });
+        }
+      }
     } catch {
       // Notification failure shouldn't break the movement
     }

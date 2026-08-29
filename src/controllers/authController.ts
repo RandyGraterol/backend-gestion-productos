@@ -266,7 +266,7 @@ export const forgotPasswordHandler = async (
 };
 
 /**
- * Reset password with token
+ * Reset password with OTP code
  * POST /api/auth/reset-password
  */
 export const resetPasswordHandler = async (
@@ -275,8 +275,8 @@ export const resetPasswordHandler = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { token, newPassword } = req.body;
-    const result = await authService.resetPassword(token, newPassword);
+    const { email, code, password } = req.body;
+    const result = await authService.resetPassword(email, code, password);
     res.status(200).json({ success: true, data: result, message: result.message });
   } catch (error) {
     next(error);

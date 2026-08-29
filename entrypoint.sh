@@ -41,7 +41,66 @@ if [ "$DB_DIALECT" = "postgres" ]; then
 fi
 
 # ============================================
-# 2. Run all migrations
+# 2. Apply critical schema fixes (SQL directly)
+# ============================================
+echo ""
+echo "🔧 Applying critical schema fixes..."
+node -e "
+  const { Sequelize } = require('sequelize');
+  const seq = new Sequelize(
+    process.env.DB_NAME || 'inventario_db',
+    process.env.DB_USER || 'inventario_user',
+    process.env.DB_PASSWORD || 'inventario_secure_2026',
+    {
+      host: process.env.DB_HOST || 'localhost',
+      port: parseInt(process.env.DB_PORT || '5432', 10),
+      dialect: 'postgres',
+      logging: false,
+    }
+  );
+
+  const fixes = [
+    // Drop NOT NULL from legacy columns in stock_movements
+    'ALTER TABLE \"stock_movements\" ALTER COLUMN \"productId\" DROP NOT NULL',
+    'ALTER TABLE \"stock_movements\" ALTER COLUMN \"quantity\" DROP NOT NULL',
+    'ALTER TABLE \"stock_movements\" ALTER COLUMN \"previousStock\" DROP NOT NULL',
+    'ALTER TABLE \"stock_movements\" ALTER COLUMN \"newStock\" DROP NOT NULL',
+    // Drop legacy foreign key
+    'ALTER TABLE \"stock_movements\" DROP CONSTRAINT IF EXISTS \"stock_movements_productId_fkey\"',
+  ];
+
+  (async () => {
+    try {
+      await seq.authenticate();
+      console.log('  ✅ Connected to PostgreSQL');
+
+      for (const sql of fixes) {
+        try {
+          await seq.query(sql);
+          const col = sql.match(/\"(\w+)\"/g);
+          console.log('  ✓ Applied: ' + (col ? col[col.length - 1] : sql.substring(0, 50)));
+        } catch (e) {
+          // Column may not exist or already nullable - that's fine
+          if (e.parent && e.parent.code === '42703') {
+            // column does not exist
+          } else if (e.parent && e.parent.code === '42P01') {
+            // relation does not exist
+          } else {
+            console.log('  ⏭ Skipped (already applied): ' + (e.parent ? e.parent.message : e.message).substring(0, 80));
+          }
+        }
+      }
+      console.log('  ✅ Schema fixes applied');
+      await seq.close();
+    } catch (e) {
+      console.error('  ⚠️  Schema fix connection error:', e.message);
+      await seq.close();
+    }
+  })();
+"
+
+# ============================================
+# 3. Run all migrations
 # ============================================
 echo ""
 echo "🔄 Running database migrations..."
@@ -57,7 +116,7 @@ fi
 echo ""
 
 # ============================================
-# 3. Start the application
+# 4. Start the application
 # ============================================
 echo "🚀 Starting application..."
 exec "$@"

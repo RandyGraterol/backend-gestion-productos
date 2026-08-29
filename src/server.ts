@@ -188,8 +188,8 @@ const startServer = async () => {
     scheduleDailyRateUpdate();
 
     // Start HTTP server + Socket.io
-    const httpServer = app.listen(config.server.port, () => {
-      console.log(`✅ Server running in ${config.server.nodeEnv} mode on port ${config.server.port}`);
+    const httpServer = app.listen(config.server.port, config.server.host, () => {
+      console.log(`✅ Server running in ${config.server.nodeEnv} mode on ${config.server.host}:${config.server.port}`);
       console.log(`✅ CORS enabled for origins: ${config.cors.origin.join(', ')}`);
       console.log(`✅ API available at: ${config.api.prefix}`);
     });

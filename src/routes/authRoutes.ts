@@ -62,13 +62,14 @@ router.post(
 
 /**
  * POST /api/auth/reset-password
- * Reset password with token
+ * Reset password with OTP code
  */
 router.post(
   '/reset-password',
   authLimiter,
   validate([
-    { field: 'token', required: true, type: 'string' },
+    { field: 'email', required: true, type: 'string' },
+    { field: 'code', required: true, type: 'string', pattern: /^\d{6}$/ },
     { field: 'password', required: true, type: 'string', min: 8 },
   ]),
   resetPasswordHandler

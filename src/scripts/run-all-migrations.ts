@@ -7,12 +7,15 @@ import path from 'path';
  */
 const MIGRATIONS = [
   'add-missing-user-columns',
+  'add-missing-product-columns',
+  'add-missing-category-columns',
   'add-deletedAt-to-products-and-categories',
   'add-expiry-date-to-products',
   'add-userid-to-products-and-categories',
   'add-location-vpn-to-download-logs',
   'add-ip-vpn-fields-to-users',
   'add-stock-movement-items',
+  'fix-stock-movements-drop-notnull',
 ];
 
 /**

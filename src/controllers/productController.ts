@@ -1,9 +1,11 @@
 import { Response, NextFunction } from 'express';
+import fs from 'fs';
 import { AuthRequest } from '../types';
 import * as productService from '../services/productService';
 import ProductImage from '../models/ProductImage';
-import { getFileUrl, deleteUploadedFile } from '../config/multer';
+import { deleteUploadedFile } from '../config/multer';
 import { resolveTenantId, resolveTenantIdWithBypass } from '../utils/tenant';
+import { optimizeImage, storeOptimizedImages } from '../services/imageStorageService';
 
 /**
  * Create a new product with optional images
@@ -38,21 +40,33 @@ export const createHandler = async (
       try {
         const imageRecords = await Promise.all(
           uploadedFiles.map(async (file, index) => {
-            const imageUrl = getFileUrl(req, file.filename);
+            const inputBuffer = fs.readFileSync(file.path);
+            const optimized = await optimizeImage(inputBuffer);
+            const stored = await storeOptimizedImages(
+              optimized,
+              { productId: product.id, index, originalName: file.originalname }
+            );
             return await ProductImage.create({
               productId: product.id,
-              imageUrl,
-              fileName: file.filename,
-              fileSize: file.size,
-              mimeType: file.mimetype,
+              imageUrl: stored.imageUrl,
+              thumbnailUrl: stored.thumbnailUrl,
+              storageProvider: stored.storageProvider,
+              publicId: stored.publicId ?? null,
+              thumbnailPublicId: stored.thumbnailPublicId ?? null,
+              fileName: file.originalname,
+              fileSize: optimized.large.length,
+              mimeType: 'image/webp',
               isPrimary: index === 0,
               displayOrder: index,
             });
           })
         );
-        
+
+        // Clean up multer temp files
+        uploadedFiles.forEach((file) => deleteUploadedFile(file.path));
+
         const productWithImages = await productService.getProductById(product.id, userId);
-        
+
         res.status(201).json({
           success: true,
           data: productWithImages,
@@ -167,27 +181,39 @@ export const updateHandler = async (
           where: { productId: req.params.id },
           order: [['displayOrder', 'DESC']],
         });
-        
-        const nextDisplayOrder = currentImages.length > 0 
+
+        const nextDisplayOrder = currentImages.length > 0
           ? currentImages[0].displayOrder + 1
           : 0;
-        
+
         const hasPrimaryImage = currentImages.some(img => img.isPrimary);
-        
+
         await Promise.all(
           uploadedFiles.map(async (file, index) => {
-            const imageUrl = getFileUrl(req, file.filename);
+            const inputBuffer = fs.readFileSync(file.path);
+            const optimized = await optimizeImage(inputBuffer);
+            const stored = await storeOptimizedImages(
+              optimized,
+              { productId: req.params.id, index, originalName: file.originalname }
+            );
             return await ProductImage.create({
               productId: req.params.id,
-              imageUrl,
-              fileName: file.filename,
-              fileSize: file.size,
-              mimeType: file.mimetype,
+              imageUrl: stored.imageUrl,
+              thumbnailUrl: stored.thumbnailUrl,
+              storageProvider: stored.storageProvider,
+              publicId: stored.publicId ?? null,
+              thumbnailPublicId: stored.thumbnailPublicId ?? null,
+              fileName: file.originalname,
+              fileSize: optimized.large.length,
+              mimeType: 'image/webp',
               isPrimary: !hasPrimaryImage && index === 0,
               displayOrder: nextDisplayOrder + index,
             });
           })
         );
+
+        // Clean up multer temp files
+        uploadedFiles.forEach((file) => deleteUploadedFile(file.path));
       } catch (imageError) {
         uploadedFiles.forEach((file) => deleteUploadedFile(file.path));
         console.error('Images could not be saved, but product was updated');

@@ -85,7 +85,7 @@ services:
       JWT_REFRESH_EXPIRES_IN: 30d
 
       # CORS
-      CORS_ORIGIN: http://localhost:8080,http://localhost:19006,http://192.168.1.6:*
+      CORS_ORIGIN: http://localhost:8080,http://localhost:19006,http://192.168.1.7:*
 
       # Security
       RATE_LIMIT_ENABLED: "true"
