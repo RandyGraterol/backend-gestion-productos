@@ -213,7 +213,7 @@ export const downloadVersionHandler = async (
     }
 
     const absolutePath = appVersionService.resolveFilePath(appVersion.filePath);
-    const downloadName = `inventario-santiago-v${appVersion.version}.apk`;
+    const downloadName = `inventario-app-v${appVersion.version}.apk`;
 
     res.download(absolutePath, downloadName, (err) => {
       if (err && !res.headersSent) {

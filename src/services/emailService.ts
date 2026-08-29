@@ -4,36 +4,11 @@
  */
 
 import nodemailer from 'nodemailer';
-import path from 'path';
-import fs from 'fs';
 import { config } from '../config/env';
+import { LOGO_BASE64 } from '../assets/logo-email-base64';
 
 // Email transporter (lazy initialization)
 let transporter: nodemailer.Transporter | null = null;
-
-/**
- * Resolve the path to an asset file, checking both src/assets (dev) and dist/assets (production)
- * @param filename - The asset filename
- * @returns The resolved path to the asset
- */
-const resolveAssetPath = (filename: string): string => {
-  const devPath = path.resolve(process.cwd(), 'src', 'assets', filename);
-  const prodPath = path.resolve(process.cwd(), 'dist', 'assets', filename);
-
-  // Check dev path first (source exists)
-  if (fs.existsSync(devPath)) {
-    return devPath;
-  }
-
-  // Fall back to dist path (production Docker build)
-  if (fs.existsSync(prodPath)) {
-    return prodPath;
-  }
-
-  // Return dev path as default (will throw if file doesn't exist)
-  console.warn(`⚠️  Asset not found: ${filename}. Checked: ${devPath}, ${prodPath}`);
-  return devPath;
-};
 
 /**
  * Initialize email transporter
@@ -83,9 +58,7 @@ export const sendPasswordResetEmail = async (
         <div style="max-width: 600px; margin: 0 auto; padding: 40px 20px;">
           <!-- Header -->
           <div style="text-align: center; margin-bottom: 32px;">
-            <div style="display: inline-block; width: 64px; height: 64px; background: linear-gradient(135deg, #059669, #065f46); border-radius: 16px; line-height: 64px; font-size: 32px;">
-              📦
-            </div>
+            <img src="${LOGO_BASE64}" alt="Logo InventarioApp" width="64" height="64" style="border-radius: 16px; display: block; margin: 0 auto;">
             <h1 style="color: #0f172a; font-size: 24px; margin-top: 16px; margin-bottom: 8px;">
               InventarioApp
             </h1>
@@ -174,7 +147,7 @@ export const sendDownloadCodeEmail = async (
         <div style="max-width: 600px; margin: 0 auto; padding: 40px 20px;">
           <!-- Header -->
           <div style="text-align: center; margin-bottom: 28px;">
-            <img src="cid:logo-santiago" alt="Logo" width="96" height="96" style="border-radius: 20px;" />
+            <img src="${LOGO_BASE64}" alt="Logo InventarioApp" width="80" height="80" style="border-radius: 18px; display: block; margin: 0 auto;">
             <h1 style="color: #0f172a; font-size: 24px; margin-top: 14px; margin-bottom: 8px;">
               Software Inventario
             </h1>
@@ -229,13 +202,6 @@ export const sendDownloadCodeEmail = async (
       to,
       subject: `Código de verificación: ${code} - Software Inventario`,
       html: htmlContent,
-      attachments: [
-        {
-          filename: 'logo-santiago.png',
-          path: resolveAssetPath('logo-santiago.png'),
-          cid: 'logo-santiago',
-        },
-      ],
     });
 
     // Detect SMTP rejections (invalid mailbox, blocked recipient...)
@@ -302,9 +268,7 @@ export const sendWelcomeEmail = async (
       <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f8fafc;">
         <div style="max-width: 600px; margin: 0 auto; padding: 40px 20px;">
           <div style="text-align: center; margin-bottom: 32px;">
-            <div style="display: inline-block; width: 64px; height: 64px; background: linear-gradient(135deg, #059669, #065f46); border-radius: 16px; line-height: 64px; font-size: 32px;">
-              📦
-            </div>
+            <img src="${LOGO_BASE64}" alt="Logo InventarioApp" width="64" height="64" style="border-radius: 16px; display: block; margin: 0 auto;">
             <h1 style="color: #0f172a; font-size: 24px; margin-top: 16px;">
               ¡Bienvenido a InventarioApp!
             </h1>
