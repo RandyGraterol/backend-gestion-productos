@@ -153,6 +153,7 @@ export const getCategoryStats = async (userId: string) => {
 
 /**
  * Get stock movement statistics by date for a specific user
+ * Uses stock_movement_items for quantity data (multi-product structure)
  */
 export const getMovementStats = async (userId: string, days: number = 7) => {
   const fromDate = new Date();
@@ -161,15 +162,16 @@ export const getMovementStats = async (userId: string, days: number = 7) => {
 
   const results = await sequelize.query(
     `
-    SELECT 
-      DATE("createdAt") as "date",
-      COUNT(*) as "count",
-      SUM(CASE WHEN "type" = 'in' THEN "quantity" ELSE 0 END) as "entries",
-      SUM(CASE WHEN "type" = 'out' THEN "quantity" ELSE 0 END) as "exits",
-      SUM(CASE WHEN "type" = 'adjustment' THEN ABS("quantity") ELSE 0 END) as "adjustments"
-    FROM "stock_movements"
-    WHERE "createdAt" >= :fromDate AND "userId" = :userId
-    GROUP BY DATE("createdAt")
+    SELECT
+      DATE(sm."createdAt") as "date",
+      COUNT(DISTINCT sm."id") as "count",
+      COALESCE(SUM(CASE WHEN sm."type" = 'in' THEN si."quantity" ELSE 0 END), 0) as "entries",
+      COALESCE(SUM(CASE WHEN sm."type" = 'out' THEN si."quantity" ELSE 0 END), 0) as "exits",
+      COALESCE(SUM(CASE WHEN sm."type" = 'adjustment' THEN ABS(si."quantity") ELSE 0 END), 0) as "adjustments"
+    FROM "stock_movements" sm
+    INNER JOIN "stock_movement_items" si ON si."movementId" = sm."id"
+    WHERE sm."createdAt" >= :fromDate AND sm."userId" = :userId
+    GROUP BY DATE(sm."createdAt")
     ORDER BY "date" ASC
     `,
     { replacements: { fromDate: fromDate.toISOString(), userId }, type: 'SELECT' }
@@ -277,6 +279,7 @@ export const getTopSellingProducts = async (userId: string, limit: number = 5) =
 
 /**
  * Get profit stats for a specific user
+ * Uses stock_movement_items for quantity and product data (multi-product structure)
  */
 export const getProfitStats = async (userId: string, days: number = 7) => {
   const fromDate = new Date();
@@ -285,13 +288,14 @@ export const getProfitStats = async (userId: string, days: number = 7) => {
 
   const results = await sequelize.query(
     `
-    SELECT 
+    SELECT
       DATE(sm."createdAt") as "date",
-      SUM(sm."quantity" * p."price") as "revenue",
-      SUM(sm."quantity" * p."cost") as "costs",
-      SUM(sm."quantity" * (p."price" - p."cost")) as "profit"
+      SUM(si."totalPrice") as "revenue",
+      SUM(si."quantity" * p."cost") as "costs",
+      SUM(si."totalPrice" - si."quantity" * p."cost") as "profit"
     FROM "stock_movements" sm
-    INNER JOIN "products" p ON sm."productId" = p."id"
+    INNER JOIN "stock_movement_items" si ON si."movementId" = sm."id"
+    INNER JOIN "products" p ON si."productId" = p."id"
     WHERE sm."createdAt" >= :fromDate AND sm."type" = 'out' AND sm."userId" = :userId
     GROUP BY DATE(sm."createdAt")
     ORDER BY "date" ASC
@@ -301,8 +305,8 @@ export const getProfitStats = async (userId: string, days: number = 7) => {
 
   return results.map((row: any) => ({
     date: row.date,
-    revenue: parseFloat(parseFloat(row.revenue).toFixed(2)),
-    costs: parseFloat(parseFloat(row.costs).toFixed(2)),
-    profit: parseFloat(parseFloat(row.profit).toFixed(2)),
+    revenue: parseFloat(parseFloat(row.revenue || 0).toFixed(2)),
+    costs: parseFloat(parseFloat(row.costs || 0).toFixed(2)),
+    profit: parseFloat(parseFloat(row.profit || 0).toFixed(2)),
   }));
 };
