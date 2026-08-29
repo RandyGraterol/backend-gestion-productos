@@ -38,10 +38,10 @@ export const getDashboardStats = async (userId: string, dateRange?: { from: Date
   });
   const rawInventoryValueUSD = products
     .filter(p => p.currency === 'USD')
-    .reduce((sum, p) => sum + p.price * p.stock, 0);
+    .reduce((sum, p) => sum + Number(p.price) * Number(p.stock), 0);
   const rawInventoryValueVES = products
     .filter(p => p.currency === 'VES')
-    .reduce((sum, p) => sum + p.price * p.stock, 0);
+    .reduce((sum, p) => sum + Number(p.price) * Number(p.stock), 0);
 
   // Convert USD to VES using official rate for display
   const rates = getCachedRates();
@@ -50,7 +50,7 @@ export const getDashboardStats = async (userId: string, dateRange?: { from: Date
   // VES display = native VES + USD converted to VES
   const inventoryValueVES = rawInventoryValueVES + rawInventoryValueUSD * officialRate;
   const totalValue = inventoryValueUSD + inventoryValueVES;
-  const potentialProfit = products.reduce((sum, p) => sum + (p.price - p.cost) * p.stock, 0);
+  const potentialProfit = products.reduce((sum, p) => sum + (Number(p.price) - Number(p.cost)) * Number(p.stock), 0);
 
   // Total categories for this user
   const totalCategories = await Category.count({ where: { userId } });
@@ -100,8 +100,8 @@ export const getDashboardStats = async (userId: string, dateRange?: { from: Date
 
   // Total sold: sum of totalAmountUSD/VES from movements of type 'out'
   const outMovements = movements.filter(m => m.type === 'out');
-  const rawTotalSoldUSD = outMovements.reduce((sum, m) => sum + (m.totalAmountUSD || 0), 0);
-  const rawTotalSoldVES = outMovements.reduce((sum, m) => sum + (m.totalAmountVES || 0), 0);
+  const rawTotalSoldUSD = outMovements.reduce((sum, m) => sum + Number(m.totalAmountUSD || 0), 0);
+  const rawTotalSoldVES = outMovements.reduce((sum, m) => sum + Number(m.totalAmountVES || 0), 0);
   // VES display = native VES + USD converted to VES
   const totalSoldUSD = rawTotalSoldUSD;
   const totalSoldVES = rawTotalSoldVES + rawTotalSoldUSD * officialRate;

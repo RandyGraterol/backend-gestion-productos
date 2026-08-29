@@ -151,3 +151,32 @@ export const getProductHistoryHandler = async (
     next(error);
   }
 };
+
+/**
+ * Delete a stock movement
+ * DELETE /api/stock/movements/:id
+ */
+export const deleteMovementHandler = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const userId = resolveTenantId(req.user!);
+
+    if (!userId) {
+      res.status(401).json({ success: false, error: 'User authentication required' });
+      return;
+    }
+
+    await stockService.deleteStockMovement(req.params.id, userId);
+
+    res.status(200).json({
+      success: true,
+      message: 'Stock movement deleted successfully',
+    });
+  } catch (error) {
+    console.error('[StockController] deleteMovement error:', error);
+    next(error);
+  }
+};

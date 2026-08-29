@@ -4,6 +4,7 @@ import {
   getMovementsHandler,
   getMovementByIdHandler,
   getProductHistoryHandler,
+  deleteMovementHandler,
 } from '../controllers/stockController';
 import { authenticate } from '../middleware/auth';
 import { validate } from '../middleware/validator';
@@ -38,6 +39,12 @@ router.get('/movements', authenticate, getMovementsHandler);
  * Get stock movement by ID with items
  */
 router.get('/movements/:id', authenticate, getMovementByIdHandler);
+
+/**
+ * DELETE /api/stock/movements/:id
+ * Delete a stock movement and reverse stock changes
+ */
+router.delete('/movements/:id', authenticate, deleteMovementHandler);
 
 /**
  * GET /api/stock/products/:productId/history

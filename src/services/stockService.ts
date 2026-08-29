@@ -214,6 +214,7 @@ export const createStockMovement = async (
 
       // Update product stock atomically
       await product.update({ stock: newStock }, { transaction });
+      itemData.product.stock = newStock;
 
       createdItems.push(item.toJSON());
     }
@@ -421,4 +422,92 @@ export const getProductStockHistory = async (
   });
 
   return items.map(item => item.toJSON());
+};
+
+/**
+ * Delete a stock movement and reverse stock changes
+ */
+export const deleteStockMovement = async (
+  id: string,
+  userId: string
+): Promise<void> => {
+  const transaction: Transaction = await sequelize.transaction();
+
+  try {
+    const movement = await StockMovement.findOne({
+      where: { id, userId },
+      include: [
+        {
+          model: StockMovementItem,
+          as: 'items',
+        },
+      ],
+      transaction,
+    });
+
+    if (!movement) {
+      throw new AppError('Stock movement not found', 404);
+    }
+
+    const items = movement.items || [];
+
+    // Reverse stock changes for each product
+    for (const item of items) {
+      const product = await Product.findOne({
+        where: { id: item.productId, userId },
+        transaction,
+      });
+
+      if (product) {
+        let newStock = product.stock;
+        switch (movement.type) {
+          case 'in':
+            newStock = product.stock - item.quantity;
+            break;
+          case 'out':
+            newStock = product.stock + item.quantity;
+            break;
+          case 'adjustment':
+            newStock = item.previousStock;
+            break;
+          case 'transfer':
+            newStock = product.stock + item.quantity;
+            break;
+        }
+        await product.update({ stock: newStock }, { transaction });
+      }
+    }
+
+    // Delete items then movement
+    await StockMovementItem.destroy({ where: { movementId: id }, transaction });
+    await movement.destroy({ transaction });
+
+    await transaction.commit();
+
+    // Emit real-time socket events
+    try {
+      const { getIO } = await import('./notificationService');
+      const io = getIO();
+      if (io) {
+        io.to(`user:${userId}`).emit('movement:deleted', { id });
+
+        for (const item of items) {
+          const product = await Product.findOne({
+            where: { id: item.productId, userId },
+          });
+          if (product) {
+            io.to(`user:${userId}`).emit('product:updated', {
+              id: product.id,
+              stock: product.stock,
+            });
+          }
+        }
+      }
+    } catch {
+      // Notification failure shouldn't break the deletion
+    }
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
+  }
 };
