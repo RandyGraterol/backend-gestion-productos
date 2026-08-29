@@ -112,13 +112,13 @@ const getUploadsPath = (): string => {
 
 const uploadsPath = getUploadsPath();
 console.log(`📁 Serving static files from: ${uploadsPath}`);
-app.use('/backendanalis/uploads', express.static(uploadsPath));
+app.use('/inventario/uploads', express.static(uploadsPath));
 app.use('/uploads', express.static(uploadsPath));
 
 /**
  * Health check endpoint
  */
-app.get('/backendanalis/health', (_req: Request, res: Response) => {
+app.get('/inventario/health', (_req: Request, res: Response) => {
   res.status(200).json({
     success: true,
     message: 'Server is running',
@@ -139,7 +139,7 @@ app.get('/health', (_req: Request, res: Response) => {
  * API routes
  */
 //RUTAS PARA PROXY
-app.use(`/backendanalis${config.api.prefix}`, routes);
+app.use(`/inventario${config.api.prefix}`, routes);
 
 app.use(config.api.prefix, routes);
 
@@ -167,16 +167,17 @@ const startServer = async () => {
     // Print configuration
     printConfig();
 
-    // Run idempotent migrations before database sync
-    console.log('Running migrations...');
-    await runAllMigrations();
-
-    // Initialize database without forcing or altering
+    // Initialize database FIRST — creates all tables via model sync.
+    // Migrations run after so they can alter columns on existing tables.
     console.log('Initializing database...');
     await initializeDatabase({
       force: config.database.forceSync,
       alter: config.database.alterSync,
     });
+
+    // Run idempotent migrations after tables exist
+    console.log('Running migrations...');
+    await runAllMigrations();
 
     // Seed default categories for users who don't have any
     await seedDefaultCategoriesForAllUsers();
