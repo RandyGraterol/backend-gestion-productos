@@ -24,8 +24,8 @@ FROM node:20-alpine AS production
 
 WORKDIR /app
 
-# Install dumb-init for proper signal handling
-RUN apk add --no-cache dumb-init
+# Install dumb-init + su-exec for proper signal handling and user switching
+RUN apk add --no-cache dumb-init su-exec
 
 # Create non-root user
 RUN addgroup -g 1001 -S appgroup && \
@@ -41,16 +41,16 @@ COPY --from=builder /app/dist ./dist
 # Copy assets (images, etc.) from source
 COPY --from=builder /app/src/assets ./dist/assets
 
-# Create necessary directories
-RUN mkdir -p uploads backups logs database && \
+# Create necessary directories and set ownership
+RUN mkdir -p uploads/products uploads/apk uploads/donations uploads/temp backups logs database && \
     chown -R appuser:appgroup /app
 
 # Copy entrypoint script
 COPY entrypoint.sh ./entrypoint.sh
 RUN chmod +x ./entrypoint.sh
 
-# Switch to non-root user
-USER appuser
+# NOTE: Do NOT use USER appuser here — entrypoint runs as root to fix
+# volume permissions, then drops to appuser via su-exec before starting the app
 
 # Expose port
 EXPOSE 3010

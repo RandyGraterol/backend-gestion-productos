@@ -116,7 +116,17 @@ fi
 echo ""
 
 # ============================================
-# 4. Start the application
+# 4. Fix upload directory permissions (runs as root)
+# ============================================
+echo ""
+echo "📁 Fixing upload directory permissions..."
+mkdir -p /app/uploads/products /app/uploads/apk /app/uploads/donations /app/uploads/temp
+chown -R appuser:appgroup /app/uploads
+chmod -R 755 /app/uploads
+echo "  ✅ Upload directories ready"
+
+# ============================================
+# 5. Start the application as appuser (drop privileges)
 # ============================================
 echo "🚀 Starting application..."
-exec "$@"
+exec su-exec appuser "$@"

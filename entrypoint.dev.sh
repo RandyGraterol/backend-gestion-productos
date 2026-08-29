@@ -56,7 +56,16 @@ fi
 echo ""
 
 # ============================================
-# 3. Start the application
+# 3. Fix upload directory permissions
+# ============================================
+echo ""
+echo "📁 Fixing upload directory permissions..."
+mkdir -p /app/uploads/products /app/uploads/apk /app/uploads/donations /app/uploads/temp
+chmod -R 777 /app/uploads 2>/dev/null || true
+echo "  ✅ Upload directories ready"
+
+# ============================================
+# 4. Start the application
 # ============================================
 echo "🚀 Starting development server..."
 exec "$@"
