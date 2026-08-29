@@ -55,9 +55,9 @@ USER appuser
 # Expose port
 EXPOSE 3010
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:3010/health || exit 1
+# Health check — use node since wget --spider isn't reliable in Alpine
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+  CMD node -e "const http = require('http'); const req = http.get('http://localhost:3010/health', r => { process.exit(r.statusCode === 200 ? 0 : 1); }); req.on('error', () => process.exit(1)); req.end()"
 
 # Start application: run migrations then start server
 ENTRYPOINT ["dumb-init", "--", "./entrypoint.sh"]
