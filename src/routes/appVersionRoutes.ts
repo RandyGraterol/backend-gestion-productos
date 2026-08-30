@@ -11,6 +11,7 @@ import {
   statsHandler,
   requestDownloadCodeHandler,
   verifyDownloadCodeHandler,
+  checkDownloadEmailHandler,
 } from '../controllers/appVersionController';
 import { authLimiter } from '../middleware/rateLimiter';
 
@@ -28,6 +29,12 @@ router.get('/latest', latestVersionHandler);
 router.get('/stats', authenticate, authorize('admin'), statsHandler);
 
 // Email verification flow for downloads (public, rate limited)
+router.post(
+  '/check-download-email',
+  authLimiter,
+  validate([{ field: 'email', required: true, type: 'string' }]),
+  checkDownloadEmailHandler
+);
 router.post(
   '/request-code',
   authLimiter,

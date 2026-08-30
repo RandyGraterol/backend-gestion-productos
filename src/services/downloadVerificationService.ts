@@ -203,3 +203,31 @@ export const consumeDownloadToken = async (token: string): Promise<{ email: stri
 
   return { email: record.email };
 };
+
+/**
+ * Check if an email already has a valid (verified, unused, non-expired) download token.
+ * If so, return it so the frontend can skip the code verification step.
+ */
+export const checkDownloadEmail = async (
+  email: string
+): Promise<{ alreadyVerified: true; token: string; expiresInMinutes: number } | { alreadyVerified: false }> => {
+  const normalizedEmail = email.trim().toLowerCase();
+
+  const record = await DownloadVerification.findOne({
+    where: {
+      email: normalizedEmail,
+      verified: true,
+      tokenUsed: false,
+      tokenExpiresAt: { [Op.gt]: new Date() },
+    },
+    order: [['createdAt', 'DESC']],
+  });
+
+  if (record && record.token && record.tokenExpiresAt) {
+    const expiresInMs = new Date(record.tokenExpiresAt).getTime() - Date.now();
+    const expiresInMinutes = Math.max(1, Math.ceil(expiresInMs / (60 * 1000)));
+    return { alreadyVerified: true, token: record.token, expiresInMinutes };
+  }
+
+  return { alreadyVerified: false };
+};

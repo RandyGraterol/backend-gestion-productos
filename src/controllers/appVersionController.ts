@@ -50,6 +50,26 @@ export const verifyDownloadCodeHandler = async (
 };
 
 /**
+ * Public: check if an email already has a valid download token (skip code step)
+ */
+export const checkDownloadEmailHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { email } = req.body;
+    const result = await downloadVerificationService.checkDownloadEmail(email);
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * Public: list all active app versions
  */
 export const listVersionsHandler = async (
@@ -173,12 +193,7 @@ export const downloadVersionHandler = async (
           verifiedUserEmail = user.email;
         }
       } catch {
-        // JWT inválido o expirado — devolver error claro
-        res.status(401).json({
-          success: false,
-          error: 'Tu sesión ha expirado. Inicia sesión nuevamente para descargar.',
-        });
-        return;
+        // JWT inválido o expirado — puede usar token de un solo uso
       }
     }
 
@@ -190,7 +205,7 @@ export const downloadVersionHandler = async (
       if (!token) {
         res.status(401).json({
           success: false,
-          error: 'Debes iniciar sesión o confirmar tu correo para descargar.',
+          error: 'Debes confirmar tu correo para poder descargar.',
         });
         return;
       }
