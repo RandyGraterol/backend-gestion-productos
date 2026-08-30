@@ -147,14 +147,20 @@ export const downloadVersionHandler = async (
     const { id } = req.params;
 
     // Admin bypass: valid admin JWT allows direct download without consuming tokens.
-    // Cualquier usuario autenticado con correo verificado también descarga directo.
+    // Cualquier usuario autenticado con JWT válido y activo puede descargar.
+    // Acepta JWT via Authorization header O via auth_token query param (para mobile).
     const authHeader = req.headers.authorization;
+    const authTokenQuery = typeof req.query.auth_token === 'string' ? req.query.auth_token : '';
     let isAdminDownload = false;
     let verifiedUserEmail: string | null = null;
 
-    if (authHeader?.startsWith('Bearer ')) {
+    const jwtSource = authHeader?.startsWith('Bearer ')
+      ? authHeader.slice(7)
+      : authTokenQuery || null;
+
+    if (jwtSource) {
       try {
-        const decoded = verifyToken(authHeader.slice(7));
+        const decoded = verifyToken(jwtSource);
         const user = await User.findByPk(decoded.id, {
           attributes: ['id', 'email', 'role', 'emailVerified', 'isActive'],
         });
@@ -162,12 +168,17 @@ export const downloadVersionHandler = async (
         if (user?.isActive) {
           if (user.role === 'admin') {
             isAdminDownload = true;
-          } else if (user.emailVerified) {
-            verifiedUserEmail = user.email;
           }
+          // Any active user with valid JWT can download
+          verifiedUserEmail = user.email;
         }
       } catch {
-        // Token inválido cae a la validación de token de un solo uso
+        // JWT inválido o expirado — devolver error claro
+        res.status(401).json({
+          success: false,
+          error: 'Tu sesión ha expirado. Inicia sesión nuevamente para descargar.',
+        });
+        return;
       }
     }
 
@@ -176,6 +187,13 @@ export const downloadVersionHandler = async (
 
     if (!isAdminDownload && !verifiedUserEmail) {
       const token = typeof req.query.token === 'string' ? req.query.token : '';
+      if (!token) {
+        res.status(401).json({
+          success: false,
+          error: 'Debes iniciar sesión o confirmar tu correo para descargar.',
+        });
+        return;
+      }
       // Consume the one-time token issued after email verification
       const verification = await downloadVerificationService.consumeDownloadToken(token);
 
