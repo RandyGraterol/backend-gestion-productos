@@ -243,6 +243,7 @@ export const updateUserForCaller = async (
     plan?: string | null;
     planStatus?: string | null;
     planExpiry?: string | null;
+    emailVerified?: boolean;
   },
   caller: { id: string; role: string }
 ): Promise<UserResponse> => {
@@ -264,13 +265,14 @@ export const updateUserForCaller = async (
     updateData.password = data.password;
   }
 
-  // Solo el admin puede actualizar campos de plan
+  // Solo el admin puede actualizar campos de plan y verificación
   if (caller.role === 'admin') {
     if (data.plan !== undefined) updateData.plan = data.plan;
     if (data.planStatus !== undefined) updateData.planStatus = data.planStatus;
     if (data.planExpiry !== undefined) {
       updateData.planExpiry = data.planExpiry ? new Date(data.planExpiry) : null;
     }
+    if (data.emailVerified !== undefined) updateData.emailVerified = data.emailVerified;
   }
 
   if (Object.keys(updateData).length === 0) {

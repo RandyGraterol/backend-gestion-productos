@@ -92,6 +92,7 @@ export const updateHandler = async (
             plan: req.body.plan,
             planStatus: req.body.planStatus,
             planExpiry: req.body.planExpiry,
+            emailVerified: req.body.emailVerified,
           }
         : { name: req.body.name, password: req.body.password };
 
