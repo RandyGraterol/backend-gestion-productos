@@ -16,6 +16,7 @@ const MIGRATIONS = [
   'add-ip-vpn-fields-to-users',
   'add-stock-movement-items',
   'fix-stock-movements-drop-notnull',
+  'add-exchange-rate-fields-to-users',
 ];
 
 /**
