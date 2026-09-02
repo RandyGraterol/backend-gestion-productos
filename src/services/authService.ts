@@ -33,6 +33,8 @@ const buildUserResponse = async (user: User): Promise<UserResponse> => {
     planStatus: user.planStatus,
     planExpiry: user.planExpiry,
     trialStartDate: user.trialStartDate,
+    customExchangeRate: user.customExchangeRate ?? null,
+    exchangeRateMode: user.exchangeRateMode ?? 'auto',
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   } as any;

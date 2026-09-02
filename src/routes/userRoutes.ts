@@ -6,6 +6,7 @@ import {
   deactivateHandler,
   createHandler,
   publicCountHandler,
+  updateExchangeRateHandler,
 } from '../controllers/userController';
 import { authenticate, authorize } from '../middleware/auth';
 import { validate } from '../middleware/validator';
@@ -24,6 +25,16 @@ router.get('/count', authLimiter, publicCountHandler);
  * client: sus operadores · admin: todos
  */
 router.get('/', authenticate, authorize('admin', 'client'), getAllHandler);
+
+/**
+ * PUT /api/users/exchange-rate
+ * Any authenticated user can update their own exchange rate mode
+ */
+router.put(
+  '/exchange-rate',
+  authenticate,
+  updateExchangeRateHandler
+);
 
 /**
  * POST /api/users

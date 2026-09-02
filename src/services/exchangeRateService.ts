@@ -1,5 +1,6 @@
 import axios from 'axios';
 import cron from 'node-cron';
+import { resetAllManualRates } from './userService';
 
 /**
  * Exchange Rate Service
@@ -119,6 +120,15 @@ export const scheduleDailyRateUpdate = (): void => {
   cron.schedule('0 0 * * *', async () => {
     console.log('🕛 Running scheduled exchange rate update...');
     try {
+      // On Mondays, reset all manual exchange rates before fetching fresh ones
+      const now = new Date();
+      const caracasTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Caracas' }));
+      if (caracasTime.getDay() === 1) {
+        console.log('🔄 Monday: resetting manual exchange rates...');
+        const resetCount = await resetAllManualRates();
+        console.log(`✅ Reset ${resetCount} manual exchange rates to auto`);
+      }
+
       rateCache = null;
       const rate = await fetchExchangeRates();
       console.log(`✅ Daily rates updated: Official=${rate.official} Parallel=${rate.parallel}`);

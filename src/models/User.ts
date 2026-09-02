@@ -7,7 +7,7 @@ import { hashPassword, comparePassword } from '../utils/password';
 interface UserCreationAttributes
   extends Optional<
     UserAttributes,
-    'id' | 'ownerId' | 'phone' | 'businessType' | 'emailVerified' | 'avatar' | 'isActive' | 'registrationIp' | 'registrationLocation' | 'isVpn' | 'createdAt' | 'updatedAt'
+    'id' | 'ownerId' | 'phone' | 'businessType' | 'emailVerified' | 'avatar' | 'isActive' | 'registrationIp' | 'registrationLocation' | 'isVpn' | 'customExchangeRate' | 'exchangeRateMode' | 'createdAt' | 'updatedAt'
   > {}
 
 /**
@@ -33,6 +33,8 @@ class User extends Model<UserAttributes, UserCreationAttributes> implements User
   public registrationIp?: string | null;
   public registrationLocation?: string | null;
   public isVpn?: boolean;
+  public customExchangeRate?: number | null;
+  public exchangeRateMode?: 'auto' | 'manual';
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 
@@ -173,6 +175,18 @@ User.init(
       allowNull: false,
       defaultValue: false,
       comment: 'Whether registration IP belongs to a VPN/proxy network',
+    },
+    customExchangeRate: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: true,
+      defaultValue: null,
+      comment: 'Manual exchange rate set by the user (Bs per USD)',
+    },
+    exchangeRateMode: {
+      type: DataTypes.STRING(10),
+      allowNull: false,
+      defaultValue: 'auto',
+      comment: 'auto = use API rate, manual = use customExchangeRate',
     },
     createdAt: {
       type: DataTypes.DATE,

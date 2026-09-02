@@ -355,3 +355,40 @@ export const getAdminOverview = async (): Promise<AdminOverview> => {
     recentClients: recentClients.map(u => u.toJSON() as any),
   };
 };
+
+/**
+ * Update exchange rate mode for a user
+ * @param userId - User ID
+ * @param mode - 'auto' or 'manual'
+ * @param customRate - Custom rate value (null when mode is 'auto')
+ * @returns Updated user without password
+ */
+export const updateExchangeRate = async (
+  userId: string,
+  mode: 'auto' | 'manual',
+  customRate: number | null
+): Promise<UserResponse> => {
+  const user = await User.findByPk(userId);
+  if (!user) {
+    throw new AppError('User not found', 404);
+  }
+
+  await user.update({
+    exchangeRateMode: mode,
+    customExchangeRate: mode === 'manual' ? customRate : null,
+  });
+
+  const { password, ...userWithoutPassword } = user.toJSON();
+  return userWithoutPassword;
+};
+
+/**
+ * Reset all manual exchange rates to auto (used by Monday cron)
+ */
+export const resetAllManualRates = async (): Promise<number> => {
+  const [affectedCount] = await User.update(
+    { exchangeRateMode: 'auto', customExchangeRate: null },
+    { where: { exchangeRateMode: 'manual' } }
+  );
+  return affectedCount;
+};

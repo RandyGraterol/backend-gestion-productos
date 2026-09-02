@@ -52,6 +52,10 @@ export interface UserAttributes {
   registrationLocation?: string | null;
   /** true si la IP de registro pertenece a una red VPN/proxy */
   isVpn?: boolean;
+  /** Tasa de cambio manual del usuario (Bs por USD) */
+  customExchangeRate?: number | null;
+  /** 'auto' = usar tasa de API, 'manual' = usar customExchangeRate */
+  exchangeRateMode?: 'auto' | 'manual';
   createdAt: Date;
   updatedAt: Date;
 }
@@ -71,6 +75,8 @@ export interface UserCreationAttributes {
   registrationIp?: string | null;
   registrationLocation?: string | null;
   isVpn?: boolean;
+  customExchangeRate?: number | null;
+  exchangeRateMode?: 'auto' | 'manual';
 }
 
 // User without password for API responses

@@ -151,3 +151,55 @@ export const publicCountHandler = async (
     next(error);
   }
 };
+
+/**
+ * Update exchange rate mode for the authenticated user:
+ * - exchangeRateMode: 'auto' | 'manual'
+ * - customExchangeRate: number (required when mode is 'manual')
+ * PUT /api/users/exchange-rate
+ */
+export const updateExchangeRateHandler = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { exchangeRateMode, customExchangeRate } = req.body;
+
+    if (!exchangeRateMode || !['auto', 'manual'].includes(exchangeRateMode)) {
+      res.status(400).json({
+        success: false,
+        message: 'exchangeRateMode must be "auto" or "manual"',
+      });
+      return;
+    }
+
+    let rateValue: number | null = null;
+    if (exchangeRateMode === 'manual') {
+      rateValue = parseFloat(customExchangeRate);
+      if (isNaN(rateValue) || rateValue <= 0 || rateValue > 10000) {
+        res.status(400).json({
+          success: false,
+          message: 'customExchangeRate must be a number between 0 and 10,000 when mode is "manual"',
+        });
+        return;
+      }
+    }
+
+    const user = await userService.updateExchangeRate(
+      req.user!.id,
+      exchangeRateMode,
+      rateValue
+    );
+
+    res.status(200).json({
+      success: true,
+      data: user,
+      message: exchangeRateMode === 'manual'
+        ? 'Tasa de cambio manual configurada correctamente'
+        : 'Tasa de cambio configurada en automático',
+    });
+  } catch (error) {
+    next(error);
+  }
+};
