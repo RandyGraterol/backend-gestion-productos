@@ -131,18 +131,27 @@ export const createStockMovement = async (
     // Validate stock before proceeding
     await validateStock(movementData.items, movementData.type, movementData.userId);
 
-    // Capture current BCV exchange rate for accounting traceability
-    // If cache is empty, fetch fresh rates to ensure accurate conversion
-    let cached = getCachedRates();
-    if (!cached || !cached.official) {
-      try {
-        const { fetchExchangeRates } = await import('./exchangeRateService');
-        cached = await fetchExchangeRates(true);
-      } catch (err) {
-        console.warn('[StockService] Could not fetch exchange rates, defaulting to 1:', err);
+    // Determine exchange rate: user's custom rate takes priority over API rate
+    let exchangeRate = 1;
+    try {
+      const user = await User.findByPk(movementData.userId, {
+        attributes: ['exchangeRateMode', 'customExchangeRate'],
+      });
+      if (user?.exchangeRateMode === 'manual' && user?.customExchangeRate) {
+        exchangeRate = parseFloat(user.customExchangeRate.toString());
+      } else {
+        // Fall back to cached API rate
+        let cached = getCachedRates();
+        if (!cached || !cached.official) {
+          const { fetchExchangeRates } = await import('./exchangeRateService');
+          cached = await fetchExchangeRates(true);
+        }
+        exchangeRate = cached?.official ?? 1;
       }
+    } catch (err) {
+      console.warn('[StockService] Could not determine exchange rate, defaulting to 1:', err);
+      exchangeRate = 1;
     }
-    const exchangeRate = cached?.official ?? 1;
 
     // Calculate totals with price conversion
     const { totalUSD, totalVES, itemsWithPrices } = await calculateTotals(
