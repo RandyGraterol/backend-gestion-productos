@@ -8,11 +8,14 @@ import { config } from '../config/env';
 
 /**
  * General rate limiter for all API routes
- * Limits: 100 requests per 15 minutes per IP
+ * Limits: 1000 requests per 15 minutes per user
  */
 export const apiLimiter = rateLimit({
   windowMs: config.security.rateLimitWindow * 60 * 1000, // minutes to ms
-  max: config.security.rateLimitMax,
+  max: 1000,
+  keyGenerator: (req) => {
+    return (req as any).user?.id || req.ip || 'unknown';
+  },
   message: {
     success: false,
     error: 'Too many requests, please try again later.',
@@ -45,11 +48,15 @@ export const authLimiter = rateLimit({
 
 /**
  * Upload rate limiter
- * Limits: 20 uploads per hour per IP
+ * Limits: 500 uploads per hour per user (keyGenerator uses userId from JWT)
  */
 export const uploadLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
-  max: 20,
+  max: 500,
+  keyGenerator: (req) => {
+    // Use userId from JWT if available, fallback to IP
+    return (req as any).user?.id || req.ip || 'unknown';
+  },
   message: {
     success: false,
     error: 'Too many file uploads, please try again later.',
