@@ -3,6 +3,15 @@ import { AuthRequest } from '../types';
 import * as categoryService from '../services/categoryService';
 import { resolveTenantId, resolveTenantIdWithBypass } from '../utils/tenant';
 
+/** Emit socket event to user room (non-blocking) */
+function emitToUser(userId: string, event: string, data: Record<string, unknown>) {
+  try {
+    const { getIO } = require('../services/notificationService');
+    const io = getIO();
+    if (io) io.to(`user:${userId}`).emit(event, data);
+  } catch { /* socket failure should not block */ }
+}
+
 /**
  * Create a new category
  * POST /api/categories
@@ -27,6 +36,7 @@ export const createHandler = async (
       data: category,
       message: 'Category created successfully',
     });
+    emitToUser(userId, 'category:created', { id: category.id });
   } catch (error) {
     next(error);
   }
@@ -109,6 +119,7 @@ export const updateHandler = async (
       data: category,
       message: 'Category updated successfully',
     });
+    emitToUser(userId, 'category:updated', { id: req.params.id });
   } catch (error) {
     next(error);
   }
@@ -128,6 +139,7 @@ export const deleteHandler = async (
     await categoryService.deleteCategory(req.params.id, userId);
 
     res.status(204).send();
+    emitToUser(userId, 'category:deleted', { id: req.params.id });
   } catch (error) {
     next(error);
   }

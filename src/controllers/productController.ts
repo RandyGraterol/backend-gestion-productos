@@ -7,6 +7,15 @@ import { deleteUploadedFile } from '../config/multer';
 import { resolveTenantId, resolveTenantIdWithBypass } from '../utils/tenant';
 import { optimizeImage, storeOptimizedImages } from '../services/imageStorageService';
 
+/** Emit socket event to user room (non-blocking) */
+function emitToUser(userId: string, event: string, data: Record<string, unknown>) {
+  try {
+    const { getIO } = require('../services/notificationService');
+    const io = getIO();
+    if (io) io.to(`user:${userId}`).emit(event, data);
+  } catch { /* socket failure should not block */ }
+}
+
 /**
  * Create a new product with optional images
  * POST /api/products
@@ -73,6 +82,7 @@ export const createHandler = async (
           data: productWithImages,
           message: `Product created successfully with ${imageRecords.length} image(s)`,
         });
+        emitToUser(userId, 'product:created', { id: product.id });
       } catch (imageError) {
         // Rollback: delete the product
         await productService.deleteProduct(product.id, userId);
@@ -85,6 +95,7 @@ export const createHandler = async (
         data: product,
         message: 'Product created successfully',
       });
+      emitToUser(userId, 'product:created', { id: product.id });
     }
   } catch (error) {
     uploadedFiles.forEach((file) => deleteUploadedFile(file.path));
@@ -230,6 +241,7 @@ export const updateHandler = async (
         ? `Product updated successfully with ${uploadedFiles.length} new image(s)`
         : 'Product updated successfully',
     });
+    emitToUser(userId, 'product:updated', { id: req.params.id });
   } catch (error) {
     uploadedFiles.forEach((file) => deleteUploadedFile(file.path));
     next(error);
@@ -250,6 +262,7 @@ export const deleteHandler = async (
     await productService.deleteProduct(req.params.id, userId);
 
     res.status(204).send();
+    emitToUser(userId, 'product:deleted', { id: req.params.id });
   } catch (error) {
     next(error);
   }
